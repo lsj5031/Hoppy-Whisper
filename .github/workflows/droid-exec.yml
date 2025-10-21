@@ -52,7 +52,64 @@ jobs:
               return;
             }
 
-            fs.writeFileSync('prompt.txt', prompt, 'utf8');
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+
+            const issueResp = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number,
+            });
+
+            let allComments = [];
+            let page = 1;
+            while (true) {
+              const commentsResp = await github.rest.issues.listComments({
+                owner,
+                repo,
+                issue_number,
+                per_page: 100,
+                page,
+              });
+              if (!commentsResp.data.length) {
+                break;
+              }
+              allComments = allComments.concat(commentsResp.data);
+              if (commentsResp.data.length < 100) {
+                break;
+              }
+              page += 1;
+            }
+
+            const otherComments = allComments
+              .filter(comment => comment.id !== context.payload.comment.id)
+              .map(comment => {
+                const author = comment.user?.login ? `@${comment.user.login}` : 'unknown';
+                const timestamp = comment.created_at || 'unknown time';
+                const commentBody = (comment.body || '').trim() || '(empty comment)';
+                return `Comment by ${author} on ${timestamp}:\n${commentBody}`;
+              });
+
+            const issueTitle = issueResp.data.title || '(untitled)';
+            const issueBody = (issueResp.data.body || '').trim() || '(no description provided)';
+
+            const sections = [
+              '# Issue Context',
+              `Title: ${issueTitle}`,
+              '',
+              'Body:',
+              issueBody,
+            ];
+
+            if (otherComments.length) {
+              sections.push('', '## Other Comments', ...otherComments);
+            }
+
+            sections.push('', '## Request', prompt);
+
+            const fullPrompt = sections.join('\n');
+
+            fs.writeFileSync('prompt.txt', fullPrompt, 'utf8');
             core.setOutput('prompt', prompt);
             core.setOutput('command', match[0]);
 
