@@ -24,6 +24,13 @@ jobs:
         run: |
           Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned -Force
           irm https://app.factory.ai/cli/windows | iex
+          $userBin = Join-Path $Env:USERPROFILE 'bin'
+          $factoryBin = Join-Path $Env:USERPROFILE '.factory\bin'
+          foreach ($path in @($userBin, $factoryBin)) {
+            if (Test-Path $path) {
+              Add-Content -Path $env:GITHUB_PATH -Value $path
+            }
+          }
 
       - name: Extract droid prompt
         id: prompt
@@ -55,11 +62,21 @@ jobs:
         continue-on-error: true
         env:
           FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY }}
+          FACTORY_ORG: ${{ secrets.FACTORY_ORG }}
         run: |
           $ErrorActionPreference = 'Continue'
           $logPath = Join-Path $PWD 'droid-output.txt'
-          & droid exec --output-format text -f prompt.txt 2>&1 | Tee-Object -FilePath $logPath -Encoding UTF8
-          $exitCode = $LASTEXITCODE
+          if (-not (Test-Path $logPath)) {
+            New-Item -ItemType File -Path $logPath -Force | Out-Null
+          }
+          if (Get-Command droid -ErrorAction SilentlyContinue) {
+            & droid exec --output-format text -f prompt.txt 2>&1 | Tee-Object -FilePath $logPath -Encoding UTF8
+            $exitCode = $LASTEXITCODE
+          } else {
+            $message = "droid executable not found on PATH. Current PATH:`n$env:PATH"
+            $message | Tee-Object -FilePath $logPath -Encoding UTF8
+            $exitCode = 127
+          }
           "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           exit $exitCode
 
@@ -93,7 +110,7 @@ jobs:
 
             const lines = [];
             const outcome = process.env.STEP_OUTCOME || 'failure';
-            const statusEmoji = outcome === 'success' ? '✅' : '⚠️';
+            const statusEmoji = outcome === 'success' ? ':white_check_mark:' : ':warning:';
             const exitCode = process.env.EXIT_CODE || '1';
 
             lines.push(`${statusEmoji} \`${process.env.COMMAND_USED || '/droid'}\` triggered by @${process.env.COMMENT_AUTHOR}`);
