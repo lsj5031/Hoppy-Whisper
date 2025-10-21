@@ -18,6 +18,8 @@ include = ["src/app/py.typed"]
 ruff = "^0.6.4"
 mypy = "^1.11.2"
 pre-commit = "^3.8.0"
+pytest = "^8.3.3"
+pyinstaller = { version = "^6.10.0", python = "<3.14" }
 
 [tool.ruff]
 target-version = "py311"

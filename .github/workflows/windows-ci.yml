@@ -1,0 +1,86 @@
+name: Windows CI
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-build:
+    name: Test and Build (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+    env:
+      POETRY_VIRTUALENVS_CREATE: "true"
+      POETRY_VIRTUALENVS_IN_PROJECT: "true"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+
+      - name: Install dependencies
+        run: poetry install --with dev --no-interaction
+
+      - name: Ruff lint
+        run: poetry run ruff check
+
+      - name: Run tests
+        run: poetry run pytest
+
+      - name: Build PyInstaller bundle
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+        run: |
+          poetry run pyinstaller --noconfirm --clean --onefile --name Parakeet src/app/__main__.py
+
+      - name: Archive executable
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+        run: |
+          if (-not (Test-Path -Path dist\\Parakeet.exe)) {
+            throw 'PyInstaller did not produce dist\\Parakeet.exe'
+          }
+          Compress-Archive -Path dist\\Parakeet.exe -DestinationPath dist\\Parakeet-windows-x86_64.zip -Force
+
+      - name: Upload artifact
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: parakeet-windows
+          path: dist/Parakeet-windows-x86_64.zip
+          if-no-files-found: error
+
+  release:
+    name: Release
+    needs: test-build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: parakeet-windows
+          path: release
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/Parakeet-windows-x86_64.zip
+          generate_release_notes: true
