@@ -52,6 +52,30 @@ jobs:
               return;
             }
 
+            const optionsDefault = '--skip-permissions-unsafe';
+            let optionsText = '';
+            let requestText = prompt;
+
+            const newlineIndex = prompt.indexOf('\n');
+            if (prompt.startsWith('--')) {
+              if (newlineIndex === -1) {
+                optionsText = prompt.trim();
+                requestText = '';
+              } else {
+                optionsText = prompt.slice(0, newlineIndex).trim();
+                requestText = prompt.slice(newlineIndex + 1).trim();
+              }
+            }
+
+            if (!optionsText) {
+              optionsText = optionsDefault;
+            }
+
+            if (!requestText) {
+              core.setFailed('Please provide instructions after any flags.');
+              return;
+            }
+
             const {owner, repo} = context.repo;
             const issue_number = context.issue.number;
 
@@ -105,12 +129,14 @@ jobs:
               sections.push('', '## Other Comments', ...otherComments);
             }
 
-            sections.push('', '## Request', prompt);
+            sections.push('', '## Execution Options', optionsText);
+            sections.push('', '## Request', requestText);
 
             const fullPrompt = sections.join('\n');
 
             fs.writeFileSync('prompt.txt', fullPrompt, 'utf8');
-            core.setOutput('prompt', prompt);
+            core.setOutput('prompt', requestText);
+            core.setOutput('options', optionsText);
             core.setOutput('command', match[0]);
 
       - name: Run droid exec
@@ -120,6 +146,7 @@ jobs:
         env:
           FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY }}
           FACTORY_ORG: ${{ secrets.FACTORY_ORG }}
+          DROID_EXEC_OPTIONS: ${{ steps.prompt.outputs.options }}
         run: |
           $ErrorActionPreference = 'Continue'
           $logPath = Join-Path $PWD 'droid-output.txt'
@@ -127,7 +154,14 @@ jobs:
             New-Item -ItemType File -Path $logPath -Force | Out-Null
           }
           if (Get-Command droid -ErrorAction SilentlyContinue) {
-            & droid exec --output-format text -f prompt.txt 2>&1 | Tee-Object -FilePath $logPath -Encoding UTF8
+            $options = $env:DROID_EXEC_OPTIONS
+            if ([string]::IsNullOrWhiteSpace($options)) {
+              $optionArgs = @()
+            } else {
+              $optionArgs = $options -split '\s+'
+            }
+            $arguments = @('exec') + $optionArgs + @('--output-format', 'text', '-f', 'prompt.txt')
+            & droid @arguments 2>&1 | Tee-Object -FilePath $logPath -Encoding UTF8
             $exitCode = $LASTEXITCODE
           } else {
             $message = "droid executable not found on PATH. Current PATH:`n$env:PATH"
@@ -147,6 +181,7 @@ jobs:
           PROMPT_TEXT: ${{ steps.prompt.outputs.prompt }}
           STEP_OUTCOME: ${{ steps.droid.outcome }}
           EXIT_CODE: ${{ steps.droid.outputs.exit_code }}
+          EXEC_OPTIONS: ${{ steps.prompt.outputs.options }}
         with:
           script: |
             const fs = require('fs');
@@ -169,8 +204,10 @@ jobs:
             const outcome = process.env.STEP_OUTCOME || 'failure';
             const statusEmoji = outcome === 'success' ? ':white_check_mark:' : ':warning:';
             const exitCode = process.env.EXIT_CODE || '1';
+            const execOptions = process.env.EXEC_OPTIONS || '(default)';
 
             lines.push(`${statusEmoji} \`${process.env.COMMAND_USED || '/droid'}\` triggered by @${process.env.COMMENT_AUTHOR}`);
+            lines.push(`Options: \`${execOptions}\``);
             if (outcome !== 'success') {
               lines.push(`droid exec exited with status \`${exitCode}\`.`);
             }
