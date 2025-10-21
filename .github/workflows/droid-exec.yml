@@ -1,0 +1,123 @@
+name: droid-exec
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  run-droid-exec:
+    if: >
+      contains(github.event.comment.body, '/droid') ||
+      contains(github.event.comment.body, '/droid-exec')
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Factory CLI
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned -Force
+          irm https://app.factory.ai/cli/windows | iex
+
+      - name: Extract droid prompt
+        id: prompt
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = (context.payload.comment.body || '').trim();
+            const match = body.match(/\/droid(?:-exec)?/i);
+
+            if (!match) {
+              core.setFailed('No /droid command found in the comment body.');
+              return;
+            }
+
+            const prompt = body.slice(match.index + match[0].length).trim();
+            if (!prompt) {
+              core.setFailed('Please provide instructions after the /droid command.');
+              return;
+            }
+
+            fs.writeFileSync('prompt.txt', prompt, 'utf8');
+            core.setOutput('prompt', prompt);
+            core.setOutput('command', match[0]);
+
+      - name: Run droid exec
+        id: droid
+        shell: pwsh
+        continue-on-error: true
+        env:
+          FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $logPath = Join-Path $PWD 'droid-output.txt'
+          & droid exec --output-format text -f prompt.txt 2>&1 | Tee-Object -FilePath $logPath -Encoding UTF8
+          $exitCode = $LASTEXITCODE
+          "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          exit $exitCode
+
+      - name: Post droid exec results
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          COMMAND_USED: ${{ steps.prompt.outputs.command }}
+          PROMPT_TEXT: ${{ steps.prompt.outputs.prompt }}
+          STEP_OUTCOME: ${{ steps.droid.outcome }}
+          EXIT_CODE: ${{ steps.droid.outputs.exit_code }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const outputPath = path.join(process.cwd(), 'droid-output.txt');
+            let output = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '(no output captured)';
+
+            // Strip ANSI escape codes for readability.
+            output = output.replace(/\u001B\[[0-9;]*m/g, '');
+
+            const limit = 60000;
+            let truncated = false;
+            if (output.length > limit) {
+              output = output.slice(0, limit);
+              truncated = true;
+            }
+
+            const lines = [];
+            const outcome = process.env.STEP_OUTCOME || 'failure';
+            const statusEmoji = outcome === 'success' ? '✅' : '⚠️';
+            const exitCode = process.env.EXIT_CODE || '1';
+
+            lines.push(`${statusEmoji} \`${process.env.COMMAND_USED || '/droid'}\` triggered by @${process.env.COMMENT_AUTHOR}`);
+            if (outcome !== 'success') {
+              lines.push(`droid exec exited with status \`${exitCode}\`.`);
+            }
+            lines.push('');
+            lines.push('```\n' + output + '\n```');
+            if (truncated) {
+              lines.push('_Output truncated to 60k characters._');
+            }
+            lines.push('');
+            lines.push(`[View workflow run](${process.env.RUN_URL})`);
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: lines.join('\n')
+            });
+
+      - name: Fail workflow when droid exec fails
+        if: ${{ steps.droid.outcome == 'failure' }}
+        shell: pwsh
+        run: |
+          Write-Host "droid exec exited with status ${{ steps.droid.outputs.exit_code }}."
+          exit 1
