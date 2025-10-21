@@ -11,8 +11,9 @@ jobs:
       contains(github.event.comment.body, '/droid-exec')
     runs-on: windows-latest
     permissions:
-      contents: read
+      contents: write
       issues: write
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -137,6 +138,7 @@ jobs:
             fs.writeFileSync('prompt.txt', fullPrompt, 'utf8');
             core.setOutput('prompt', requestText);
             core.setOutput('options', optionsText);
+            core.setOutput('issue_title', issueTitle);
             core.setOutput('command', match[0]);
 
       - name: Run droid exec
@@ -171,6 +173,117 @@ jobs:
           "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           exit $exitCode
 
+      - name: Prepare branch name
+        id: branch
+        if: ${{ steps.droid.outcome == 'success' }}
+        uses: actions/github-script@v7
+        with:
+          title: ${{ steps.prompt.outputs.issue_title }}
+          number: ${{ github.event.issue.number }}
+          script: |
+            const slugify = (input) => input
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '')
+              .slice(0, 40) || 'changes';
+            const title = core.getInput('title') || '';
+            const number = core.getInput('number');
+            const branch = `issue-${number}-${slugify(title)}`;
+            core.setOutput('branch', branch);
+
+      - name: Commit and push changes
+        id: commit
+        if: ${{ steps.droid.outcome == 'success' }}
+        shell: pwsh
+        env:
+          BRANCH_NAME: ${{ steps.branch.outputs.branch }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          $status = git status --porcelain
+          if (-not $status) {
+            Write-Host "No changes detected; skipping commit."
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "changes=false"
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "branch="
+            exit 0
+          }
+
+          $baseBranch = $env:BRANCH_NAME
+          if ([string]::IsNullOrWhiteSpace($baseBranch)) {
+            $baseBranch = "issue-$($env:ISSUE_NUMBER)-changes"
+          }
+
+          $branch = $baseBranch
+          $suffix = 1
+          $remote = git ls-remote --heads origin $branch
+          while ($remote) {
+            $branch = "$baseBranch-$suffix"
+            $suffix++
+            $remote = git ls-remote --heads origin $branch
+          }
+
+          git checkout -b $branch
+          git add --all
+          $commitMessage = "Apply droid updates for #$($env:ISSUE_NUMBER)"
+          git commit -m $commitMessage
+          git push --set-upstream origin $branch
+
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "changes=true"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "branch=$branch"
+
+      - name: Create pull request
+        id: create_pr
+        if: ${{ steps.commit.outputs.changes == 'true' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ steps.commit.outputs.branch }}
+          base: ${{ github.event.repository.default_branch }}
+          issue-number: ${{ github.event.issue.number }}
+          exec-options: ${{ steps.prompt.outputs.options }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = core.getInput('branch');
+            if (!branch) {
+              core.setOutput('pr_url', '');
+              return;
+            }
+            const base = core.getInput('base') || context.payload.repository.default_branch;
+            const issueNumber = core.getInput('issue-number');
+            const execOptions = core.getInput('exec-options');
+            const headRef = `${owner}:${branch}`;
+            const existing = await github.rest.pulls.list({
+              owner,
+              repo,
+              head: headRef,
+              state: 'open',
+              per_page: 1,
+            });
+            let pr;
+            if (existing.data.length) {
+              pr = existing.data[0];
+            } else {
+              const title = `Droid updates for #${issueNumber}`;
+              const bodyLines = [
+                'Automated changes triggered by `/droid`.',
+                '',
+                `- Issue: #${issueNumber}`,
+                `- Options: \`${execOptions || '(default)'}\``,
+              ];
+              pr = (await github.rest.pulls.create({
+                owner,
+                repo,
+                head: branch,
+                base,
+                title,
+                body: bodyLines.join('\n'),
+              })).data;
+            }
+            core.setOutput('pr_url', pr.html_url);
+
       - name: Post droid exec results
         if: always()
         uses: actions/github-script@v7
@@ -182,6 +295,9 @@ jobs:
           STEP_OUTCOME: ${{ steps.droid.outcome }}
           EXIT_CODE: ${{ steps.droid.outputs.exit_code }}
           EXEC_OPTIONS: ${{ steps.prompt.outputs.options }}
+          BRANCH_CREATED: ${{ steps.commit.outputs.changes }}
+          BRANCH_NAME: ${{ steps.commit.outputs.branch }}
+          PR_URL: ${{ steps.create_pr.outputs.pr_url }}
         with:
           script: |
             const fs = require('fs');
@@ -205,9 +321,22 @@ jobs:
             const statusEmoji = outcome === 'success' ? ':white_check_mark:' : ':warning:';
             const exitCode = process.env.EXIT_CODE || '1';
             const execOptions = process.env.EXEC_OPTIONS || '(default)';
+            const branchCreated = process.env.BRANCH_CREATED === 'true';
+            const branchName = process.env.BRANCH_NAME;
+            const prUrl = process.env.PR_URL;
 
             lines.push(`${statusEmoji} \`${process.env.COMMAND_USED || '/droid'}\` triggered by @${process.env.COMMENT_AUTHOR}`);
             lines.push(`Options: \`${execOptions}\``);
+            if (branchCreated) {
+              if (branchName) {
+                lines.push(`Branch: \`${branchName}\``);
+              }
+              if (prUrl) {
+                lines.push(`[View pull request](${prUrl})`);
+              }
+            } else if (outcome === 'success') {
+              lines.push('No code changes were generated by this run.');
+            }
             if (outcome !== 'success') {
               lines.push(`droid exec exited with status \`${exitCode}\`.`);
             }
