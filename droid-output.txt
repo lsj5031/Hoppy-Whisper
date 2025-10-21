@@ -1,14 +1,22 @@
 
 # Summary
-Initialized a Poetry-managed Python 3.11 project with a `src/app` layout covering tray, hotkey, audio, transcriber, cleanup, and history packages, plus MIT licensing. Added a README detailing quick start, planned hotkey flow, and troubleshooting guidance; generated a lockfile and validated the configuration with Poetry.
+- Added linting, type checking, and pre-commit tooling to the project, leaving placeholders untouched.
+- Ensured the `app` package is recognized as typed by adding the `py.typed` marker and including it in packaging metadata.
 
 ## Plan
-- Install Poetry, define a PEP 621-based `pyproject.toml`, and lock dependencies for Python 3.11.
-- Scaffold the `src/app` namespace with placeholder modules for tray, hotkey, audio, transcriber, cleanup, and history components.
-- Provide repository documentation (README and MIT license) and verify setup via `py -3.11 -m poetry check`.
+1. Extend `pyproject.toml` with the required development dependencies and tool configurations (Ruff, Mypy, Pre-commit).
+2. Create supporting configuration files (`.pre-commit-config.yaml`) and package markers to satisfy tooling expectations.
+3. Refresh the Poetry lockfile and verify the new tooling by running lint, type-check, and pre-commit checks.
 
-## Testing
-- `py -3.11 -m poetry check`
+## Changes
+- Updated `pyproject.toml` to declare Ruff, Mypy, and Pre-commit dev dependencies, configure Ruff and Mypy, and include the `py.typed` marker in the package.
+- Generated `.pre-commit-config.yaml` to run `ruff --fix` and `ruff-format` on commits.
+- Added `src/app/py.typed` to mark the package as typed and regenerated `poetry.lock` with the new dependency set.
 
-## PR Status
-Pushed branch `e0.1-poetry-init` (commit `ac4c378`). `gh pr create` is unavailable in this environment because no `GH_TOKEN` is configured; open the PR manually via <https://github.com/lsj5031/parakeet/compare/master...e0.1-poetry-init?expand=1>.
+## Tests
+- `python3 -m poetry run ruff check`
+- `python3 -m poetry run mypy`
+- `python3 -m poetry run pre-commit run --all-files`
+
+## Additional Notes
+- `prompt.txt` had existing modifications prior to this task and was left untouched by the current changes.
