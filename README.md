@@ -26,13 +26,38 @@ Parakeet is a Windows-native tray application for fast transcription and clipboa
 - The executable is zipped as `Parakeet-windows-x86_64.zip` and uploaded as a workflow artifact.
 - Tag pushes that match `v*` create a GitHub Release and attach the generated zip.
 
-## Hotkey flow (planned)
+## Usage
 
-The default experience targets a single press-and-hold hotkey (tentatively <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd>):
+### Hotkey Workflow
 
-- **Press & hold** - start audio capture and indicate the "Listening" tray state.
-- **Release** - stop capture, trigger speech-to-text transcription, and run smart cleanup.
-- **Press again within a short window** - paste the cleaned transcript into the active window.
+The default hotkey is <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>;</kbd>:
+
+- **Press & hold** - start audio capture and show "Listening" tray state
+- **Release** - stop capture and begin transcription
+- **Press again within 2 seconds** - paste the transcript into the active window
+
+### Configuration
+
+Settings are stored in `%LOCALAPPDATA%\Parakeet\settings.json` and can be edited manually or via the tray menu (Settings → opens file location).
+
+**Available Settings:**
+
+```json
+{
+  "first_run_complete": false,
+  "hotkey_chord": "CTRL+SHIFT+;",
+  "paste_window_seconds": 2.0,
+  "start_with_windows": false
+}
+```
+
+- `hotkey_chord`: Global hotkey combination (e.g., "CTRL+ALT+V")
+- `paste_window_seconds`: Time window for same-hotkey paste (0-5 seconds)
+- `start_with_windows`: Launch at Windows login
+- `first_run_complete`: Internal flag for first-run notification
+
+**Environment Override:**
+Set `PARAKEET_SETTINGS_PATH` to use a custom settings file location.
 
 ## Troubleshooting
 

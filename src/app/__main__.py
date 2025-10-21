@@ -9,6 +9,7 @@ import threading
 from typing import Optional
 
 from app import startup
+from app.audio import AudioDeviceError, AudioRecorder
 from app.hotkey import HotkeyCallbacks, HotkeyInUseError, HotkeyManager
 from app.settings import AppSettings, default_settings_path
 from app.tray import TrayController, TrayMenuActions, TrayState
@@ -27,6 +28,8 @@ class AppRuntime:
         self._idle_timer: Optional[threading.Timer] = None
         self._app_name = "Parakeet"
         self._startup_command = startup.resolve_startup_command()
+        self._audio_recorder = AudioRecorder()
+        self._audio_buffer: Optional[object] = None
         registry_startup = self._probe_startup_state()
         self._tray = TrayController(
             app_name=self._app_name,
@@ -117,16 +120,51 @@ class AppRuntime:
         self._recording_active = True
         self._cancel_timer(self._transcribe_timer)
         self._cancel_timer(self._idle_timer)
-        self._tray.set_state(TrayState.LISTENING)
+
+        try:
+            self._audio_recorder.start()
+            self._tray.set_state(TrayState.LISTENING)
+        except AudioDeviceError as exc:
+            LOGGER.error("Audio device error: %s", exc)
+            self._notify("Microphone Error", str(exc))
+            self._recording_active = False
+            self._tray.set_state(TrayState.ERROR)
+            self._schedule_idle_reset()
+        except Exception as exc:
+            LOGGER.exception("Failed to start audio capture", exc_info=exc)
+            self._notify("Recording Error", "Could not start audio capture")
+            self._recording_active = False
+            self._tray.set_state(TrayState.ERROR)
+            self._schedule_idle_reset()
 
     def _handle_record_stop(self) -> None:
         if not self._recording_active:
             return
         LOGGER.debug("Hotkey released: stop recording")
         self._recording_active = False
-        self._tray.set_state(TrayState.TRANSCRIBING)
-        self._transcribe_timer = threading.Timer(0.8, self._complete_transcription)
-        self._transcribe_timer.start()
+
+        try:
+            self._audio_buffer = self._audio_recorder.stop()
+            # Calculate duration from returned buffer
+            buffer_samples = len(self._audio_buffer) if self._audio_buffer is not None else 0
+            duration = buffer_samples / self._audio_recorder.sample_rate
+            LOGGER.info("Captured %.2f seconds of audio (%d samples)", duration, buffer_samples)
+
+            if duration < 0.1:
+                LOGGER.warning("Audio buffer too short (%.2f s), skipping transcription", duration)
+                self._notify("Recording Too Short", "Please hold the hotkey longer")
+                self._tray.set_state(TrayState.ERROR)
+                self._schedule_idle_reset()
+                return
+
+            self._tray.set_state(TrayState.TRANSCRIBING)
+            self._transcribe_timer = threading.Timer(0.8, self._complete_transcription)
+            self._transcribe_timer.start()
+        except Exception as exc:
+            LOGGER.exception("Failed to stop audio capture", exc_info=exc)
+            self._notify("Recording Error", "Could not complete audio capture")
+            self._tray.set_state(TrayState.ERROR)
+            self._schedule_idle_reset()
 
     def _complete_transcription(self) -> None:
         LOGGER.debug("Transcription placeholder complete")

@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import Callable, Dict, List
 
 import pytest
+from PIL import Image
 from pynput import keyboard
 
+from app import startup
 from app.hotkey import HotkeyCallbacks, HotkeyManager
 from app.settings import AppSettings
-from app import startup
 from app.tray.icons import TrayIconFactory, TrayTheme
 from app.tray.state import TrayState
-from PIL import Image
 
 
 def test_icon_factory_generates_expected_frames() -> None:
