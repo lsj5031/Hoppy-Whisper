@@ -6,11 +6,14 @@ import logging
 
 from .exceptions import AudioCaptureError, AudioDeviceError
 from .recorder import AudioRecorder, list_audio_devices
+from .vad import VoiceActivityDetector, create_vad
 
 __all__ = [
     "AudioCaptureError",
     "AudioDeviceError",
     "AudioRecorder",
+    "VoiceActivityDetector",
+    "create_vad",
     "initialize_audio_pipeline",
     "list_audio_devices",
 ]
