@@ -5,6 +5,8 @@ __all__ = [
     "cleanup",
     "history",
     "hotkey",
+    "settings",
+    "startup",
     "transcriber",
     "tray",
 ]

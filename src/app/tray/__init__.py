@@ -1,6 +1,9 @@
 """Tray icon integration and system interactions."""
 
+from .controller import TrayController, TrayMenuActions, TrayState
 
-def initialize_tray() -> None:
-    """Placeholder for tray icon setup logic."""
-    pass
+__all__ = [
+    "TrayController",
+    "TrayMenuActions",
+    "TrayState",
+]
