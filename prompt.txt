@@ -1,18 +1,18 @@
 # Issue Context
-Title: [E0.2] Code quality & tooling (Ruff, Mypy, Pre-commit)
+Title: [E1.1] System tray icon & context menu (pystray)
 
 Body:
 ### Acceptance Criteria
-- Ruff lint rules configured; `poetry run ruff check` passes.
-- Mypy (or pyright) type checks pass for core modules (allow missing imports for C-ext).
-- Pre-commit hooks run ruff + formatting on commit.
+- Tray icon appears with app name and starts minimized.
+- Context menu: Toggle Recording, Settings, History, Start with Windows, Quit.
+- First‑run notification explains hotkey and Shift‑to‑bypass cleanup.
 
 ## Other Comments
-Comment by @lsj5031 on 2025-10-21T01:34:49Z:
+Comment by @lsj5031 on 2025-10-21T01:34:54Z:
 Depends on: #1
 
 ## Execution Options
 --skip-permissions-unsafe
 
 ## Request
-implement this
+implement it

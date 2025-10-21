@@ -1,22 +1,2 @@
 
-# Summary
-- Added linting, type checking, and pre-commit tooling to the project, leaving placeholders untouched.
-- Ensured the `app` package is recognized as typed by adding the `py.typed` marker and including it in packaging metadata.
 
-## Plan
-1. Extend `pyproject.toml` with the required development dependencies and tool configurations (Ruff, Mypy, Pre-commit).
-2. Create supporting configuration files (`.pre-commit-config.yaml`) and package markers to satisfy tooling expectations.
-3. Refresh the Poetry lockfile and verify the new tooling by running lint, type-check, and pre-commit checks.
-
-## Changes
-- Updated `pyproject.toml` to declare Ruff, Mypy, and Pre-commit dev dependencies, configure Ruff and Mypy, and include the `py.typed` marker in the package.
-- Generated `.pre-commit-config.yaml` to run `ruff --fix` and `ruff-format` on commits.
-- Added `src/app/py.typed` to mark the package as typed and regenerated `poetry.lock` with the new dependency set.
-
-## Tests
-- `python3 -m poetry run ruff check`
-- `python3 -m poetry run mypy`
-- `python3 -m poetry run pre-commit run --all-files`
-
-## Additional Notes
-- `prompt.txt` had existing modifications prior to this task and was left untouched by the current changes.
