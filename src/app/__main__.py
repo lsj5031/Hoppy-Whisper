@@ -146,12 +146,18 @@ class AppRuntime:
         try:
             self._audio_buffer = self._audio_recorder.stop()
             # Calculate duration from returned buffer
-            buffer_samples = len(self._audio_buffer) if self._audio_buffer is not None else 0
+            buffer_samples = (
+                len(self._audio_buffer) if self._audio_buffer is not None else 0
+            )
             duration = buffer_samples / self._audio_recorder.sample_rate
-            LOGGER.info("Captured %.2f seconds of audio (%d samples)", duration, buffer_samples)
+            LOGGER.info(
+                "Captured %.2f seconds of audio (%d samples)", duration, buffer_samples
+            )
 
             if duration < 0.1:
-                LOGGER.warning("Audio buffer too short (%.2f s), skipping transcription", duration)
+                LOGGER.warning(
+                    "Audio buffer too short (%.2f s), skipping transcription", duration
+                )
                 self._notify("Recording Too Short", "Please hold the hotkey longer")
                 self._tray.set_state(TrayState.ERROR)
                 self._schedule_idle_reset()
@@ -218,7 +224,9 @@ class AppRuntime:
 
     def _probe_startup_state(self) -> bool:
         try:
-            registry_enabled = startup.is_startup_enabled(self._app_name, self._startup_command)
+            registry_enabled = startup.is_startup_enabled(
+                self._app_name, self._startup_command
+            )
         except startup.StartupError:
             LOGGER.debug("Startup probe unavailable on this platform", exc_info=True)
             return self._settings.start_with_windows
@@ -252,7 +260,10 @@ def show_error_dialog(message: str, title: str = "Parakeet") -> None:
 def main() -> int:
     """Launch the Parakeet tray app."""
     if sys.platform != "win32":
-        print("Parakeet is optimized for Windows and may not function correctly elsewhere.", file=sys.stderr)
+        print(
+            "Parakeet is optimized for Windows and may not function correctly elsewhere.",
+            file=sys.stderr,
+        )
     configure_logging()
     settings = AppSettings.load()
     try:

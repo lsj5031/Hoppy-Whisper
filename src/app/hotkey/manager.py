@@ -64,7 +64,10 @@ class HotkeyManager:
         *,
         paste_window_seconds: float = 2.0,
         listener_factory: Callable[
-            [Callable[[keyboard.Key | keyboard.KeyCode], None], Callable[[keyboard.Key | keyboard.KeyCode], None]],
+            [
+                Callable[[keyboard.Key | keyboard.KeyCode], None],
+                Callable[[keyboard.Key | keyboard.KeyCode], None],
+            ],
             _ListenerWrapper,
         ]
         | None = None,
@@ -136,7 +139,10 @@ class HotkeyManager:
             if not self._chord.matches(self._pressed):
                 return
             now = time.monotonic()
-            if self._last_release_time and now - self._last_release_time <= self._paste_window_seconds:
+            if (
+                self._last_release_time
+                and now - self._last_release_time <= self._paste_window_seconds
+            ):
                 self._last_release_time = 0.0
                 self._dispatch(self._callbacks.on_request_paste)
             else:
@@ -173,8 +179,12 @@ class HotkeyManager:
         if not user32.RegisterHotKey(None, 0, modifiers, virtual_key):
             error_code = ctypes.get_last_error()
             if error_code == 1409:  # ERROR_HOTKEY_ALREADY_REGISTERED
-                raise HotkeyInUseError(f"Hotkey '{chord.display}' is already registered")
-            raise HotkeyRegistrationError(f"Failed to register hotkey '{chord.display}' (error {error_code})")
+                raise HotkeyInUseError(
+                    f"Hotkey '{chord.display}' is already registered"
+                )
+            raise HotkeyRegistrationError(
+                f"Failed to register hotkey '{chord.display}' (error {error_code})"
+            )
         user32.UnregisterHotKey(None, 0)
 
     def _dispatch(self, handler: Callable[[], None]) -> None:

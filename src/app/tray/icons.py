@@ -33,7 +33,9 @@ class _IconKey:
 class TrayIconFactory:
     """Generates and caches Pillow images for tray icon states."""
 
-    def __init__(self, sizes: Iterable[int] = ICON_SIZES, spinner_frames: int = SPINNER_FRAMES) -> None:
+    def __init__(
+        self, sizes: Iterable[int] = ICON_SIZES, spinner_frames: int = SPINNER_FRAMES
+    ) -> None:
         self._sizes = tuple(sorted(set(sizes)))
         self._spinner_frames = spinner_frames
 
@@ -73,7 +75,9 @@ class TrayIconFactory:
         frame_count = self._spinner_frames if state.animated else 1
         result: Dict[int, Tuple[Image.Image, ...]] = {}
         for size in self._sizes:
-            frames = tuple(self.frame(state, theme, size, idx) for idx in range(frame_count))
+            frames = tuple(
+                self.frame(state, theme, size, idx) for idx in range(frame_count)
+            )
             result[size] = frames
         return result
 
@@ -95,7 +99,9 @@ class TrayIconFactory:
         elif key.state is TrayState.LISTENING:
             _draw_listening(draw, bounds, accents, size)
         elif key.state is TrayState.TRANSCRIBING:
-            _draw_spinner(draw, bounds, accents, border, size, key.frame, self._spinner_frames)
+            _draw_spinner(
+                draw, bounds, accents, border, size, key.frame, self._spinner_frames
+            )
         elif key.state is TrayState.COPIED:
             _draw_checkmark(draw, bounds, accents, size)
         elif key.state is TrayState.PASTED:
@@ -108,7 +114,13 @@ class TrayIconFactory:
         return image
 
 
-def _palette_for_theme(theme: TrayTheme) -> Tuple[Tuple[int, int, int, int], Tuple[int, int, int, int], Dict[str, Tuple[int, int, int, int]]]:
+def _palette_for_theme(
+    theme: TrayTheme,
+) -> Tuple[
+    Tuple[int, int, int, int],
+    Tuple[int, int, int, int],
+    Dict[str, Tuple[int, int, int, int]],
+]:
     if theme is TrayTheme.DARK:
         background = (30, 30, 30, 0)
         border = (230, 230, 230, 255)
@@ -134,7 +146,12 @@ def _palette_for_theme(theme: TrayTheme) -> Tuple[Tuple[int, int, int, int], Tup
     return background, border, accents
 
 
-def _draw_idle(draw: ImageDraw.ImageDraw, bounds: Tuple[int, int, int, int], accents: Dict[str, Tuple[int, int, int, int]], size: int) -> None:
+def _draw_idle(
+    draw: ImageDraw.ImageDraw,
+    bounds: Tuple[int, int, int, int],
+    accents: Dict[str, Tuple[int, int, int, int]],
+    size: int,
+) -> None:
     radius = size // 6
     center = size // 2
     draw.ellipse(
@@ -143,7 +160,12 @@ def _draw_idle(draw: ImageDraw.ImageDraw, bounds: Tuple[int, int, int, int], acc
     )
 
 
-def _draw_listening(draw: ImageDraw.ImageDraw, bounds: Tuple[int, int, int, int], accents: Dict[str, Tuple[int, int, int, int]], size: int) -> None:
+def _draw_listening(
+    draw: ImageDraw.ImageDraw,
+    bounds: Tuple[int, int, int, int],
+    accents: Dict[str, Tuple[int, int, int, int]],
+    size: int,
+) -> None:
     bar_width = max(1, size // 12)
     gap = bar_width
     base = bounds[0] + (bounds[2] - bounds[0]) // 2
@@ -151,7 +173,12 @@ def _draw_listening(draw: ImageDraw.ImageDraw, bounds: Tuple[int, int, int, int]
     for idx, height in enumerate(heights):
         x = base + (idx - 1) * (bar_width + gap)
         draw.rounded_rectangle(
-            (x - bar_width, size / 2 - height / 2, x + bar_width, size / 2 + height / 2),
+            (
+                x - bar_width,
+                size / 2 - height / 2,
+                x + bar_width,
+                size / 2 + height / 2,
+            ),
             radius=bar_width,
             fill=accents["listening"],
         )
@@ -181,7 +208,12 @@ def _draw_spinner(
     draw.pieslice(inner, start=start_angle, end=end_angle, fill=accents["spinner"])
 
 
-def _draw_checkmark(draw: ImageDraw.ImageDraw, bounds: Tuple[int, int, int, int], accents: Dict[str, Tuple[int, int, int, int]], size: int) -> None:
+def _draw_checkmark(
+    draw: ImageDraw.ImageDraw,
+    bounds: Tuple[int, int, int, int],
+    accents: Dict[str, Tuple[int, int, int, int]],
+    size: int,
+) -> None:
     thickness = max(2, size // 10)
     points = [
         (bounds[0] + size * 0.25, bounds[1] + size * 0.55),
@@ -191,7 +223,12 @@ def _draw_checkmark(draw: ImageDraw.ImageDraw, bounds: Tuple[int, int, int, int]
     draw.line(points, fill=accents["copied"], width=thickness, joint="curve")
 
 
-def _draw_paste_arrow(draw: ImageDraw.ImageDraw, bounds: Tuple[int, int, int, int], accents: Dict[str, Tuple[int, int, int, int]], size: int) -> None:
+def _draw_paste_arrow(
+    draw: ImageDraw.ImageDraw,
+    bounds: Tuple[int, int, int, int],
+    accents: Dict[str, Tuple[int, int, int, int]],
+    size: int,
+) -> None:
     arrow_width = max(2, size // 8)
     center_x = size // 2
     tip_y = bounds[3] - size * 0.2
@@ -212,16 +249,27 @@ def _draw_paste_arrow(draw: ImageDraw.ImageDraw, bounds: Tuple[int, int, int, in
     )
 
 
-def _draw_error(draw: ImageDraw.ImageDraw, bounds: Tuple[int, int, int, int], accents: Dict[str, Tuple[int, int, int, int]], size: int) -> None:
+def _draw_error(
+    draw: ImageDraw.ImageDraw,
+    bounds: Tuple[int, int, int, int],
+    accents: Dict[str, Tuple[int, int, int, int]],
+    size: int,
+) -> None:
     thickness = max(2, size // 10)
     margin = size * 0.3
     draw.line(
-        [(bounds[0] + margin, bounds[1] + margin), (bounds[2] - margin, bounds[3] - margin)],
+        [
+            (bounds[0] + margin, bounds[1] + margin),
+            (bounds[2] - margin, bounds[3] - margin),
+        ],
         fill=accents["error"],
         width=thickness,
     )
     draw.line(
-        [(bounds[2] - margin, bounds[1] + margin), (bounds[0] + margin, bounds[3] - margin)],
+        [
+            (bounds[2] - margin, bounds[1] + margin),
+            (bounds[0] + margin, bounds[3] - margin),
+        ],
         fill=accents["error"],
         width=thickness,
     )

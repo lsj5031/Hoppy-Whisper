@@ -75,9 +75,12 @@ def test_initialize_audio_pipeline_succeeds_with_devices(mock_sounddevice):
 
 def test_initialize_audio_pipeline_fails_without_devices(mock_sounddevice):
     """Test that initialize_audio_pipeline raises when no devices are found."""
+
     # Override to return only output devices
     def query_devices_no_input(device=None, kind=None):
-        return [{"name": "Speakers Only", "max_input_channels": 0, "max_output_channels": 2}]
+        return [
+            {"name": "Speakers Only", "max_input_channels": 0, "max_output_channels": 2}
+        ]
 
     mock_sounddevice.query_devices.side_effect = query_devices_no_input
 
@@ -127,10 +130,13 @@ def test_audio_recorder_start_raises_on_missing_device(mock_sounddevice):
 
 def test_audio_recorder_start_raises_on_insufficient_channels(mock_sounddevice):
     """Test that start() raises when device has insufficient channels."""
+
     # Override the mock to return a device with insufficient channels
     def query_devices_limited(device=None, kind=None):
         if device is None:
-            return [{"name": "Mock Mic", "max_input_channels": 0, "max_output_channels": 0}]
+            return [
+                {"name": "Mock Mic", "max_input_channels": 0, "max_output_channels": 0}
+            ]
         return {"name": "Mock Mic", "max_input_channels": 0, "max_output_channels": 0}
 
     mock_sounddevice.query_devices.side_effect = query_devices_limited

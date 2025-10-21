@@ -84,7 +84,9 @@ class TrayController:
             return
         menu = self._build_menu()
         image = self._icon_factory.frame(self._state, self._theme, self._display_size)
-        icon = pystray.Icon(self._app_name, image=image, title=self._app_name, menu=menu)
+        icon = pystray.Icon(
+            self._app_name, image=image, title=self._app_name, menu=menu
+        )
         self._icon = icon
         if self._show_first_run_tip:
             # Notify after the icon is visible to avoid lost toasts.
@@ -137,17 +139,23 @@ class TrayController:
     def _spin(self) -> None:
         interval = 0.08
         while not self._spinner_stop.wait(interval):
-            self._current_frame = (self._current_frame + 1) % self._icon_factory.spinner_frames
+            self._current_frame = (
+                self._current_frame + 1
+            ) % self._icon_factory.spinner_frames
             self._update_icon_image(frame=self._current_frame)
 
     def _update_icon_image(self, frame: int = 0) -> None:
-        image = self._icon_factory.frame(self._state, self._theme, self._display_size, frame)
+        image = self._icon_factory.frame(
+            self._state, self._theme, self._display_size, frame
+        )
         if self._icon:
             self._icon.icon = image
 
     def _build_menu(self) -> "pystray.Menu":
         return pystray.Menu(
-            pystray.MenuItem("Toggle Recording", self._wrap(self._menu_actions.toggle_recording)),
+            pystray.MenuItem(
+                "Toggle Recording", self._wrap(self._menu_actions.toggle_recording)
+            ),
             pystray.MenuItem("Settings", self._wrap(self._menu_actions.show_settings)),
             pystray.MenuItem("History", self._wrap(self._menu_actions.show_history)),
             pystray.MenuItem(
@@ -158,7 +166,9 @@ class TrayController:
             pystray.MenuItem("Quit", self._wrap(self._menu_actions.quit_app)),
         )
 
-    def _wrap(self, func: Callable[[], None]) -> Callable[["pystray.Icon", "pystray.MenuItem"], None]:
+    def _wrap(
+        self, func: Callable[[], None]
+    ) -> Callable[["pystray.Icon", "pystray.MenuItem"], None]:
         def wrapper(icon: "pystray.Icon", item: "pystray.MenuItem") -> None:
             del icon, item
             try:

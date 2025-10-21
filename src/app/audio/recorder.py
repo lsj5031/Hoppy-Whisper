@@ -84,7 +84,7 @@ class AudioRecorder:
             LOGGER.debug(
                 "Started audio capture: %d Hz, %d channel(s)",
                 self._sample_rate,
-                self._channels
+                self._channels,
             )
         except Exception as exc:
             self._recording = False

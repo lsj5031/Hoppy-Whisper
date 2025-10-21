@@ -26,7 +26,9 @@ def test_icon_factory_generates_expected_frames() -> None:
                 assert image.size == (size, size)
 
 
-def test_hotkey_manager_press_release_and_paste(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_hotkey_manager_press_release_and_paste(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     events: List[str] = []
     callbacks = HotkeyCallbacks(
         on_record_start=lambda: events.append("start"),
@@ -163,8 +165,12 @@ def test_startup_enable_disable(monkeypatch: pytest.MonkeyPatch) -> None:
     assert startup.is_startup_enabled("Parakeet", command) is False
 
 
-def test_resolve_startup_command_handles_frozen(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(startup.sys, "executable", r"C:\App\Parakeet.exe", raising=False)
+def test_resolve_startup_command_handles_frozen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        startup.sys, "executable", r"C:\App\Parakeet.exe", raising=False
+    )
     monkeypatch.setattr(startup.sys, "frozen", True, raising=False)
     cmd = startup.resolve_startup_command()
     assert cmd == '"C:\\App\\Parakeet.exe"'

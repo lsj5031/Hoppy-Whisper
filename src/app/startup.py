@@ -70,16 +70,20 @@ def is_startup_enabled(app_name: str, expected_command: str | None = None) -> bo
 
 
 @contextlib.contextmanager
-def _run_key(*, write: bool, create_if_missing: bool) -> Generator[Optional[object], None, None]:
+def _run_key(
+    *, write: bool, create_if_missing: bool
+) -> Generator[Optional[object], None, None]:
     """Context manager returning the Run registry key handle."""
     key = None
     if write:
-        access = (winreg.KEY_SET_VALUE | winreg.KEY_CREATE_SUB_KEY)  # type: ignore[operator]
+        access = winreg.KEY_SET_VALUE | winreg.KEY_CREATE_SUB_KEY  # type: ignore[operator]
         try:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY_PATH, 0, access)
         except FileNotFoundError:
             if create_if_missing:
-                key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, RUN_KEY_PATH, 0, access)
+                key = winreg.CreateKeyEx(
+                    winreg.HKEY_CURRENT_USER, RUN_KEY_PATH, 0, access
+                )
             else:
                 key = None
     else:

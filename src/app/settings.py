@@ -32,7 +32,12 @@ class AppSettings:
             data["hotkey_chord"] = data["hotkey_chord"].upper()
         if "paste_window_seconds" in data:
             data["paste_window_seconds"] = float(data["paste_window_seconds"])
-        return cls(**{field: data.get(field, getattr(cls, field)) for field in cls.__annotations__})
+        return cls(
+            **{
+                field: data.get(field, getattr(cls, field))
+                for field in cls.__annotations__
+            }
+        )
 
     @classmethod
     def load(cls, path: Optional[Path] = None) -> "AppSettings":
