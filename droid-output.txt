@@ -1,0 +1,14 @@
+
+# Summary
+Initialized a Poetry-managed Python 3.11 project with a `src/app` layout covering tray, hotkey, audio, transcriber, cleanup, and history packages, plus MIT licensing. Added a README detailing quick start, planned hotkey flow, and troubleshooting guidance; generated a lockfile and validated the configuration with Poetry.
+
+## Plan
+- Install Poetry, define a PEP 621-based `pyproject.toml`, and lock dependencies for Python 3.11.
+- Scaffold the `src/app` namespace with placeholder modules for tray, hotkey, audio, transcriber, cleanup, and history components.
+- Provide repository documentation (README and MIT license) and verify setup via `py -3.11 -m poetry check`.
+
+## Testing
+- `py -3.11 -m poetry check`
+
+## PR Status
+Pushed branch `e0.1-poetry-init` (commit `ac4c378`). `gh pr create` is unavailable in this environment because no `GH_TOKEN` is configured; open the PR manually via <https://github.com/lsj5031/parakeet/compare/master...e0.1-poetry-init?expand=1>.

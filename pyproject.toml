@@ -1,0 +1,18 @@
+[project]
+name = "parakeet"
+version = "0.1.0"
+description = "Windows tray transcription tray app foundation"
+authors = [{ name = "Parakeet Contributors", email = "maintainers@parakeet.app" }]
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11,<4.0"
+dependencies = []
+
+license-files = ["LICENSE"]
+
+[tool.poetry]
+packages = [{ include = "app", from = "src" }]
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
