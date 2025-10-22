@@ -3,11 +3,13 @@ name: Windows CI
 on:
   push:
     branches:
+      - master
       - main
     tags:
       - "v*"
   pull_request:
     branches:
+      - master
       - main
 
 jobs:
@@ -49,7 +51,7 @@ jobs:
       - name: Build PyInstaller bundle
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         run: |
-          poetry run pyinstaller --noconfirm --clean --onefile --name Parakeet src/app/__main__.py
+          poetry run pyinstaller --noconfirm --clean Parakeet.spec
 
       - name: Archive executable
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))

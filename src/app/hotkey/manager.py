@@ -31,7 +31,7 @@ class HotkeyCallbacks:
     """Callback hooks invoked by the hotkey manager."""
 
     on_record_start: Callable[[], None]
-    on_record_stop: Callable[[], None]
+    on_record_stop: Callable[[bool], None]  # bypass_cleanup flag
     on_request_paste: Callable[[], None]
     on_error: Callable[[Exception], None] = lambda exc: None
 
@@ -59,10 +59,11 @@ class HotkeyManager:
 
     def __init__(
         self,
-        chord: str,
+        chord: str | HotkeyChord,
         callbacks: HotkeyCallbacks,
         *,
         paste_window_seconds: float = 2.0,
+        toggle_mode: bool = False,
         listener_factory: Callable[
             [
                 Callable[[keyboard.Key | keyboard.KeyCode], None],
@@ -78,9 +79,13 @@ class HotkeyManager:
         self._listener: Optional[_ListenerWrapper] = None
         self._pressed: Set[int] = set()
         self._active = False
+        self._chord_down = False
         self._last_release_time = 0.0
         self._running = False
+        self._registered: bool = False
+        self._reg_id: int = 1
         self._paste_window_seconds = _validate_paste_window(paste_window_seconds)
+        self._toggle_mode = bool(toggle_mode)
         self._chord = self._parse_and_validate(chord)
 
     @property
@@ -97,7 +102,7 @@ class HotkeyManager:
         """Update the paste window duration (0–5 seconds inclusive)."""
         self._paste_window_seconds = _validate_paste_window(duration)
 
-    def update_chord(self, chord_text: str) -> None:
+    def update_chord(self, chord_text: str | HotkeyChord) -> None:
         """Change the registered chord at runtime."""
         with self._lock:
             chord = self._parse_and_validate(chord_text)
@@ -111,6 +116,9 @@ class HotkeyManager:
             if self._running:
                 return
             self._ensure_hotkey_available(self._chord)
+            # On Windows, register the hotkey for the app lifetime until stop()
+            if sys.platform == "win32":
+                self._register_hotkey()
             listener = self._listener_factory(self._on_press, self._on_release)
             listener.start()
             self._listener = listener
@@ -124,6 +132,8 @@ class HotkeyManager:
             if self._listener:
                 self._listener.stop()
             self._listener = None
+            if sys.platform == "win32" and self._registered:
+                self._unregister_hotkey()
             self._running = False
             self._pressed.clear()
             self._active = False
@@ -134,14 +144,29 @@ class HotkeyManager:
             return
         with self._lock:
             self._pressed.add(vk)
-            if self._active:
-                return
             if not self._chord.matches(self._pressed):
                 return
+            if self._toggle_mode:
+                if self._chord_down:
+                    return
+                self._chord_down = True
+                if not self._active:
+                    self._active = True
+                    self._dispatch(self._callbacks.on_record_start)
+                else:
+                    # Toggle off on chord press; bypass cleanup disabled in toggle mode
+                    self._active = False
+                    self._last_release_time = 0.0
+                    # Check if Shift is currently held to optionally bypass cleanup
+                    bypass_cleanup = any(vk in self._pressed for vk in [0x10, 0xA0, 0xA1])
+                    self._dispatch_with_bypass(self._callbacks.on_record_stop, bypass_cleanup)
+                return
+            # Hold/release mode
+            if self._active:
+                return
             now = time.monotonic()
-            if (
-                self._last_release_time
-                and now - self._last_release_time <= self._paste_window_seconds
+            if self._last_release_time and (
+                now - self._last_release_time <= self._paste_window_seconds
             ):
                 self._last_release_time = 0.0
                 self._dispatch(self._callbacks.on_request_paste)
@@ -155,16 +180,24 @@ class HotkeyManager:
             return
         with self._lock:
             self._pressed.discard(vk)
+            if not self._chord.matches(self._pressed):
+                self._chord_down = False
+            if self._toggle_mode:
+                # In toggle mode, stopping happens on the next chord press
+                return
             if not self._active:
                 return
             if self._chord.matches(self._pressed):
                 return
             self._active = False
             self._last_release_time = time.monotonic()
-            self._dispatch(self._callbacks.on_record_stop)
+            # Check if Shift is still held
+            # (VK_SHIFT = 0x10, VK_LSHIFT = 0xA0, VK_RSHIFT = 0xA1)
+            bypass_cleanup = any(vk in self._pressed for vk in [0x10, 0xA0, 0xA1])
+            self._dispatch_with_bypass(self._callbacks.on_record_stop, bypass_cleanup)
 
-    def _parse_and_validate(self, chord_text: str) -> HotkeyChord:
-        chord = parse_hotkey(chord_text)
+    def _parse_and_validate(self, chord_input: str | HotkeyChord) -> HotkeyChord:
+        chord = chord_input if isinstance(chord_input, HotkeyChord) else parse_hotkey(chord_input)
         self._ensure_hotkey_available(chord)
         return chord
 
@@ -178,7 +211,8 @@ class HotkeyManager:
         kernel32.SetLastError(0)
         if not user32.RegisterHotKey(None, 0, modifiers, virtual_key):
             error_code = ctypes.get_last_error()
-            if error_code == 1409:  # ERROR_HOTKEY_ALREADY_REGISTERED
+            # Treat unknown failures as already-registered in availability probe
+            if error_code in (0, 1409):  # ERROR_SUCCESS or ERROR_HOTKEY_ALREADY_REGISTERED
                 raise HotkeyInUseError(
                     f"Hotkey '{chord.display}' is already registered"
                 )
@@ -187,10 +221,53 @@ class HotkeyManager:
             )
         user32.UnregisterHotKey(None, 0)
 
+    def _register_hotkey(self) -> None:
+        """Register the global hotkey on Windows and keep it until stop()."""
+        virtual_key = next(iter(self._chord.key_group))
+        modifiers = self._chord.modifier_mask
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        kernel32.SetLastError(0)
+        if not user32.RegisterHotKey(None, self._reg_id, modifiers, virtual_key):
+            error_code = ctypes.get_last_error()
+            if error_code == 1409:
+                raise HotkeyInUseError(
+                    f"Hotkey '{self._chord.display}' is already registered"
+                )
+            raise HotkeyRegistrationError(
+                f"Failed to register hotkey '{self._chord.display}' (error {error_code})"
+            )
+        self._registered = True
+
+    def _unregister_hotkey(self) -> None:
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        try:
+            user32.UnregisterHotKey(None, self._reg_id)
+        finally:
+            self._registered = False
+
     def _dispatch(self, handler: Callable[[], None]) -> None:
         try:
             handler()
         except Exception as exc:  # pragma: no cover - defensive
+            try:
+                self._callbacks.on_error(exc)
+            except Exception:
+                pass
+
+    def _dispatch_with_bypass(
+        self, handler: Callable[[bool], None], bypass: bool
+    ) -> None:
+        try:
+            handler(bypass)
+        except Exception as exc:  # pragma: no cover - defensive
+            # Support handlers that take no parameters
+            if isinstance(exc, TypeError):
+                try:
+                    handler()  # type: ignore[misc]
+                    return
+                except Exception as exc2:  # fall back to error callback below
+                    exc = exc2
             try:
                 self._callbacks.on_error(exc)
             except Exception:

@@ -5,7 +5,12 @@ from __future__ import annotations
 import logging
 
 import numpy as np
-import webrtcvad
+import warnings
+
+# Suppress deprecation warning emitted by webrtcvad importing pkg_resources
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=UserWarning, module=r"^webrtcvad$")
+    import webrtcvad
 
 LOGGER = logging.getLogger(__name__)
 

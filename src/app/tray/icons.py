@@ -20,6 +20,7 @@ class TrayTheme(str, Enum):
 
     LIGHT = "light"
     DARK = "dark"
+    HIGH_CONTRAST = "high_contrast"
 
 
 @dataclass(frozen=True)
@@ -121,7 +122,19 @@ def _palette_for_theme(
     Tuple[int, int, int, int],
     Dict[str, Tuple[int, int, int, int]],
 ]:
-    if theme is TrayTheme.DARK:
+    if theme is TrayTheme.HIGH_CONTRAST:
+        # High-contrast theme for accessibility
+        background = (0, 0, 0, 0)
+        border = (255, 255, 255, 255)
+        accents = {
+            "idle": (0, 255, 255, 255),  # Cyan
+            "listening": (255, 255, 0, 255),  # Yellow
+            "spinner": (0, 255, 255, 255),  # Cyan
+            "copied": (0, 255, 0, 255),  # Green
+            "pasted": (255, 0, 255, 255),  # Magenta
+            "error": (255, 0, 0, 255),  # Red
+        }
+    elif theme is TrayTheme.DARK:
         background = (30, 30, 30, 0)
         border = (230, 230, 230, 255)
         accents = {

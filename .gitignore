@@ -40,3 +40,4 @@ Thumbs.db
 
 # PyInstaller artifacts
 *.spec
+!Parakeet.spec

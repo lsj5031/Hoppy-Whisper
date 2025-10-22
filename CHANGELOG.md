@@ -9,5 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Project scaffolding with Poetry configuration and modular `src/app` package layout.
-- Windows CI + release automation skeleton to build a placeholder PyInstaller binary.
+- Windows CI + release automation to build single-file PyInstaller executable.
+- Comprehensive PyInstaller spec file (`Parakeet.spec`) with ONNX Runtime DirectML bundling.
+- Smoke test checklist (`SMOKE_TEST.md`) for validating releases on clean Windows VMs.
+- Release packaging workflow with automatic GitHub Release creation on version tags.
+- End-user installation instructions and system requirements in README.
+- Keyboard shortcuts reference and known limitations documentation.
+
+### Changed
+- Updated CI to use `Parakeet.spec` instead of command-line PyInstaller invocation.
+- Enhanced README with download instructions, release process, and comprehensive troubleshooting guide.
 

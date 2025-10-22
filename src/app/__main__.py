@@ -8,10 +8,29 @@ import sys
 import threading
 from typing import Optional
 
+import numpy as np
+import pyperclip
+from pynput.keyboard import Controller, Key
+
 from app import startup
-from app.audio import AudioDeviceError, AudioRecorder
+from app.audio import AudioDeviceError, AudioRecorder, create_vad
+from app.audio.buffer import TempWavFile
+from app.cleanup import CleanupEngine, CleanupMode
+from app.history import HistoryDAO, HistoryPalette
 from app.hotkey import HotkeyCallbacks, HotkeyInUseError, HotkeyManager
-from app.settings import AppSettings, default_settings_path
+from app.metrics import (
+    TRANSCRIBE_BUDGET_CPU_MS,
+    TRANSCRIBE_BUDGET_GPU_MS,
+    get_metrics,
+    initialize_metrics,
+)
+from app.settings import (
+    AppSettings,
+    default_history_db_path,
+    default_metrics_log_path,
+    default_settings_path,
+)
+from app.transcriber import ParakeetTranscriber, load_transcriber
 from app.tray import TrayController, TrayMenuActions, TrayState
 
 LOGGER = logging.getLogger("parakeet")
@@ -20,27 +39,46 @@ LOGGER = logging.getLogger("parakeet")
 class AppRuntime:
     """High-level coordinator that wires the tray and hotkey subsystems."""
 
-    def __init__(self, settings: AppSettings) -> None:
+    def __init__(self, settings: AppSettings, transcriber: ParakeetTranscriber) -> None:
         self._settings = settings
+        self._transcriber = transcriber
         self._stop_event = threading.Event()
         self._recording_active = False
         self._transcribe_timer: Optional[threading.Timer] = None
         self._idle_timer: Optional[threading.Timer] = None
+        self._bypass_cleanup = False
         self._app_name = "Parakeet"
         self._startup_command = startup.resolve_startup_command()
+        # VAD state
+        self._vad = None
+        self._vad_carry = np.array([], dtype=np.float32)
+        self._vad_stop_requested = False
+
         self._audio_recorder = AudioRecorder()
-        self._audio_buffer: Optional[object] = None
+        self._audio_buffer: Optional[np.ndarray] = None
+        self._bypass_cleanup = False
+        self._cleanup_engine = self._create_cleanup_engine()
+        self._keyboard_controller = Controller()
+        self._history = HistoryDAO(
+            default_history_db_path(),
+            retention_days=settings.history_retention_days,
+        )
+        self._history.open()
         registry_startup = self._probe_startup_state()
+        self._toggle_mode = True
         self._tray = TrayController(
             app_name=self._app_name,
             menu_actions=TrayMenuActions(
                 toggle_recording=self._menu_toggle_recording,
                 show_settings=self._show_settings_tip,
                 show_history=self._show_history_tip,
+                restart_app=self._restart,
+                set_cleanup_enabled=self._set_cleanup_enabled,
                 set_start_with_windows=self._set_start_with_windows,
                 quit_app=self.stop,
             ),
             start_with_windows=registry_startup,
+            cleanup_enabled=self._settings.cleanup_enabled,
             show_first_run_tip=not settings.first_run_complete,
         )
         callbacks = HotkeyCallbacks(
@@ -53,6 +91,7 @@ class AppRuntime:
             settings.hotkey_chord,
             callbacks,
             paste_window_seconds=settings.paste_window_seconds,
+            toggle_mode=True,
         )
 
     def start(self) -> None:
@@ -76,6 +115,7 @@ class AppRuntime:
         self._cancel_timer(self._idle_timer)
         self._hotkey.stop()
         self._tray.stop()
+        self._history.close()
 
     def wait(self) -> None:
         """Block the main thread until a quit signal arrives."""
@@ -92,13 +132,38 @@ class AppRuntime:
     def _show_settings_tip(self) -> None:
         path = default_settings_path()
         self._settings.save(path)
-        self._notify(
-            "Settings",
-            f"Edit {path} to change the hotkey, paste window, or startup options.",
-        )
+        try:
+            import subprocess, os, sys
+            if sys.platform == "win32":
+                subprocess.Popen(["notepad.exe", str(path)])
+            else:
+                # Best-effort: open with default editor/viewer
+                if hasattr(os, "startfile"):
+                    os.startfile(str(path))  # type: ignore[attr-defined]
+                else:
+                    subprocess.Popen(["xdg-open", str(path)])
+        except Exception as exc:
+            LOGGER.debug("Failed to open settings editor", exc_info=exc)
+            self._notify(
+                "Settings",
+                f"Edit {path} to change the hotkey, paste window, or startup options.",
+            )
+            return
+        self._notify("Settings", "Opened settings in Notepad.")
 
     def _show_history_tip(self) -> None:
-        self._notify("History", "History UI arrives in a later milestone.")
+        """Open the history search palette."""
+        LOGGER.debug("Opening history palette")
+        try:
+            palette = HistoryPalette(
+                dao=self._history,
+                on_copy=self._palette_copy,
+                on_paste=self._palette_paste,
+            )
+            palette.show()
+        except Exception as exc:
+            LOGGER.exception("Failed to open history palette", exc_info=exc)
+            self._notify("History Error", "Could not open history palette")
 
     def _set_start_with_windows(self, enabled: bool) -> None:
         if self._settings.start_with_windows == enabled:
@@ -122,6 +187,18 @@ class AppRuntime:
         self._cancel_timer(self._idle_timer)
 
         try:
+            # Initialize VAD and wire audio chunk callback
+            try:
+                self._vad = create_vad(sample_rate=self._audio_recorder.sample_rate)
+                self._vad_carry = np.array([], dtype=np.float32)
+                self._vad_stop_requested = False
+                self._audio_recorder.set_on_frames(self._on_audio_chunk)
+            except Exception:
+                # VAD is best-effort; continue without auto-stop if initialization fails
+                LOGGER.debug("VAD initialization failed; continuing without auto-stop", exc_info=True)
+                self._vad = None
+                self._audio_recorder.set_on_frames(None)
+
             self._audio_recorder.start()
             self._tray.set_state(TrayState.LISTENING)
         except AudioDeviceError as exc:
@@ -137,11 +214,29 @@ class AppRuntime:
             self._tray.set_state(TrayState.ERROR)
             self._schedule_idle_reset()
 
-    def _handle_record_stop(self) -> None:
+    def _handle_record_stop(self, bypass_cleanup: bool = False) -> None:
         if not self._recording_active:
             return
-        LOGGER.debug("Hotkey released: stop recording")
+        # Ignore Shift-bypass; cleanup is controlled by settings
+        self._bypass_cleanup = False
+        if bypass_cleanup and getattr(self._settings, "cleanup_enabled", True):
+            LOGGER.debug("Hotkey released with Shift: ignoring bypass; using configured cleanup setting")
+        else:
+            LOGGER.debug("Hotkey released: stop recording")
         self._recording_active = False
+
+        # Detach VAD processing and reset state
+        try:
+            self._audio_recorder.set_on_frames(None)
+        except Exception:
+            LOGGER.debug("Failed to detach audio chunk callback", exc_info=True)
+        self._vad = None
+        self._vad_carry = np.array([], dtype=np.float32)
+        self._vad_stop_requested = False
+
+        # Start performance tracking for transcription pipeline
+        metrics = get_metrics()
+        metrics.start("ptt_release_to_paste")
 
         try:
             self._audio_buffer = self._audio_recorder.stop()
@@ -173,17 +268,211 @@ class AppRuntime:
             self._schedule_idle_reset()
 
     def _complete_transcription(self) -> None:
-        LOGGER.debug("Transcription placeholder complete")
-        self._tray.set_state(TrayState.COPIED)
-        self._schedule_idle_reset()
+        """Transcribe the audio buffer and copy to clipboard."""
+        if self._audio_buffer is None:
+            LOGGER.error("No audio buffer to transcribe")
+            self._notify("Transcription Error", "No audio recorded")
+            self._tray.set_state(TrayState.ERROR)
+            self._schedule_idle_reset()
+            return
+
+        try:
+            # Use TempWavFile to create a temporary WAV for transcription
+            with TempWavFile(
+                self._audio_buffer,
+                self._audio_recorder.sample_rate,
+                cleanup=True,
+            ) as wav_path:
+                result = self._transcriber.transcribe_file(wav_path)
+
+            LOGGER.info(
+                "Transcription completed in %.0f ms: '%s'",
+                result.duration_ms,
+                result.text[:100],
+            )
+
+            # Apply cleanup unless bypassed or globally disabled
+            if self._bypass_cleanup:
+                cleaned_text = result.text
+                cleanup_mode = "bypass"
+                LOGGER.info("Smart cleanup bypassed (Shift held)")
+            elif not getattr(self._settings, "cleanup_enabled", True):
+                cleaned_text = result.text
+                cleanup_mode = "disabled"
+                LOGGER.info("Smart cleanup disabled by setting")
+            else:
+                cleaned_text = self._cleanup_engine.clean(result.text)
+                cleanup_mode = self._settings.cleanup_mode
+                LOGGER.info("Smart cleanup applied (%s)", cleanup_mode)
+
+            # Save to history
+            try:
+                self._history.insert(
+                    text=cleaned_text,
+                    mode=cleanup_mode,
+                    duration_ms=int(result.duration_ms),
+                    raw_text=result.text if not self._bypass_cleanup else None,
+                )
+                LOGGER.debug("Utterance saved to history")
+            except Exception as exc:
+                LOGGER.warning("Failed to save to history: %s", exc)
+
+            # Copy to clipboard
+            try:
+                pyperclip.copy(cleaned_text)
+                LOGGER.debug("Text copied to clipboard")
+            except Exception as exc:
+                LOGGER.error("Failed to copy to clipboard: %s", exc)
+                self._notify("Clipboard Error", "Could not copy text")
+                self._tray.set_state(TrayState.ERROR)
+                self._schedule_idle_reset()
+                return
+
+            # Success!
+            self._tray.set_state(TrayState.COPIED)
+
+            # Auto-paste first to avoid focus issues from notifications
+            if self._settings.auto_paste:
+                LOGGER.debug("Auto-paste enabled, performing paste")
+                self._perform_paste()
+                self._tray.set_state(TrayState.PASTED)
+
+            self._notify("Transcribed", f"{cleaned_text[:60]}...")
+
+            # Record performance metrics
+            metrics = get_metrics()
+            event = metrics.stop(
+                "ptt_release_to_paste",
+                provider_detected=self._transcriber.provider,
+                provider_requested=getattr(self._transcriber, "provider_requested", ""),
+                cleanup_mode=cleanup_mode,
+            )
+            if event:
+                # Check against budget (GPU vs CPU)
+                detected = self._transcriber.provider
+                budget = (
+                    TRANSCRIBE_BUDGET_GPU_MS
+                    if any(k in detected.lower() for k in ("directml", "dml"))
+                    else TRANSCRIBE_BUDGET_CPU_MS
+                )
+                metrics.check_budget(
+                    "transcribe_pipeline",
+                    result.duration_ms,
+                    budget,
+                    provider_detected=detected,
+                    provider_requested=getattr(self._transcriber, "provider_requested", ""),
+                )
+
+            self._schedule_idle_reset()
+            self._bypass_cleanup = False  # Reset flag
+
+        except Exception as exc:
+            LOGGER.exception("Transcription failed", exc_info=exc)
+            self._notify(
+                "Transcription Failed", "Could not transcribe audio. Try again."
+            )
+            self._tray.set_state(TrayState.ERROR)
+            self._schedule_idle_reset()
 
     def _handle_request_paste(self) -> None:
         LOGGER.debug("Hotkey tapped within paste window: paste")
         self._tray.set_state(TrayState.PASTED)
+        self._perform_paste()
         self._schedule_idle_reset()
+
+    def _perform_paste(self) -> None:
+        """Simulate paste into the focused window (Windows: try Shift+Insert then Ctrl+V)."""
+        try:
+            # Small delay to ensure context switch
+            import time, sys
+            time.sleep(0.18)
+
+            if sys.platform == "win32":
+                # Try Shift+Insert first
+                with self._keyboard_controller.pressed(Key.shift):
+                    self._keyboard_controller.press(Key.insert)
+                    self._keyboard_controller.release(Key.insert)
+                time.sleep(0.08)
+                # Fallback: Ctrl+V
+                with self._keyboard_controller.pressed(Key.ctrl):
+                    self._keyboard_controller.press("v")
+                    self._keyboard_controller.release("v")
+                LOGGER.info("Paste commands sent (Shift+Insert, Ctrl+V)")
+            else:
+                with self._keyboard_controller.pressed(Key.ctrl):
+                    self._keyboard_controller.press("v")
+                    self._keyboard_controller.release("v")
+                LOGGER.info("Paste command sent (Ctrl+V)")
+        except Exception as exc:
+            LOGGER.error("Failed to perform paste: %s", exc)
+            self._notify("Paste Error", "Could not paste text")
+
+    def _set_cleanup_enabled(self, enabled: bool) -> None:
+        if getattr(self._settings, "cleanup_enabled", True) == enabled:
+            return
+        self._settings.cleanup_enabled = enabled
+        self._settings.save()
+        state = "enabled" if enabled else "disabled"
+        self._notify("Smart Cleanup", f"Smart cleanup {state}.")
+
+    # --- VAD integration -------------------------------------------------
+
+    def _on_audio_chunk(self, chunk: np.ndarray) -> None:
+        """Incrementally feed captured audio to VAD and auto-stop on trailing silence.
+
+        Runs on the PortAudio callback thread; keep work minimal.
+        """
+        if self._vad is None or not self._recording_active:
+            return
+        try:
+            data = chunk.flatten()
+            if self._vad_carry.size:
+                data = np.concatenate((self._vad_carry, data))
+            frame_size = self._vad.frame_size  # 30ms @ 16kHz = 480 samples
+            idx = 0
+            n = len(data)
+            while idx + frame_size <= n:
+                frame = data[idx : idx + frame_size]
+                _, should_stop = self._vad.process_frame(frame)
+                if should_stop and not self._vad_stop_requested:
+                    if self._toggle_mode:
+                        # In toggle mode, do not auto-stop on VAD; user controls stop
+                        break
+                    self._vad_stop_requested = True
+                    # Stop recording on a separate thread to avoid blocking callback
+                    threading.Thread(
+                        target=lambda: self._handle_record_stop(False),
+                        daemon=True,
+                    ).start()
+                    break
+                idx += frame_size
+            # Keep leftover for next callback
+            self._vad_carry = data[idx:]
+        except Exception:
+            # Never let VAD errors impact recording
+            LOGGER.debug("VAD processing error", exc_info=True)
 
     def _log_callback_error(self, exc: Exception) -> None:
         LOGGER.exception("Unhandled exception in hotkey callback", exc_info=exc)
+
+    # History palette callbacks -------------------------------------------
+
+    def _palette_copy(self, text: str) -> None:
+        """Copy text from history palette to clipboard."""
+        try:
+            pyperclip.copy(text)
+            LOGGER.debug("Copied from history palette to clipboard")
+        except Exception as exc:
+            LOGGER.error("Failed to copy from palette: %s", exc)
+
+    def _palette_paste(self, text: str) -> None:
+        """Copy text from history palette and paste it."""
+        try:
+            pyperclip.copy(text)
+            self._perform_paste()
+            LOGGER.debug("Pasted from history palette")
+        except Exception as exc:
+            LOGGER.error("Failed to paste from palette: %s", exc)
 
     # Helpers -------------------------------------------------------------
 
@@ -235,6 +524,29 @@ class AppRuntime:
             self._settings.save()
         return registry_enabled
 
+    def _create_cleanup_engine(self) -> CleanupEngine:
+        """Create a cleanup engine based on settings."""
+        mode_str = self._settings.cleanup_mode.lower()
+        try:
+            mode = CleanupMode(mode_str)
+        except ValueError:
+            LOGGER.warning("Invalid cleanup mode '%s', using standard", mode_str)
+            mode = CleanupMode.STANDARD
+        return CleanupEngine(mode)
+
+    def _restart(self) -> None:
+        """Restart the application by spawning a new instance and exiting."""
+        try:
+            import subprocess
+            subprocess.Popen(self._startup_command, shell=True)
+            self._notify("Restart", "Restarting Parakeet...")
+        except Exception as exc:
+            LOGGER.exception("Failed to restart application", exc_info=exc)
+            self._notify("Restart", "Could not restart the application.")
+            return
+        # Stop current runtime; main() will exit afterward
+        self.stop()
+
 
 def configure_logging() -> None:
     """Set up basic logging suitable for console and packaged builds."""
@@ -261,13 +573,62 @@ def main() -> int:
     """Launch the Parakeet tray app."""
     if sys.platform != "win32":
         print(
-            "Parakeet is optimized for Windows and may not function correctly elsewhere.",
+            "Parakeet is optimized for Windows "
+            "and may not function correctly elsewhere.",
             file=sys.stderr,
         )
     configure_logging()
     settings = AppSettings.load()
+
+    # Initialize performance metrics (opt-in via telemetry_enabled)
+    initialize_metrics(
+        enabled=settings.telemetry_enabled,
+        log_path=default_metrics_log_path() if settings.telemetry_enabled else None,
+    )
+    metrics = get_metrics()
+
+    # Track startup time
+    metrics.start("startup")
+
+    # Optional: prefetch model assets in the background for offline readiness
+    def _prefetch_models() -> None:
+        try:
+            from app.transcriber import get_model_manager
+
+            manager = get_model_manager()
+            manager.ensure_models()
+        except Exception:
+            # Prefetch is best-effort; ignore failures
+            LOGGER.debug("Model prefetch failed", exc_info=True)
+
     try:
-        runtime = AppRuntime(settings)
+        threading.Thread(target=_prefetch_models, daemon=True).start()
+    except Exception:
+        LOGGER.debug("Failed to start model prefetch thread", exc_info=True)
+
+    # Load and warm up the transcriber
+    LOGGER.info("Loading transcriber...")
+    try:
+        transcriber = load_transcriber()
+        try:
+            requested = getattr(transcriber, "provider_requested", "")
+            LOGGER.info(
+                "Transcriber ready (detected: %s; requested: %s)",
+                transcriber.provider,
+                requested,
+            )
+        except Exception:
+            LOGGER.info("Transcriber ready (provider: %s)", transcriber.provider)
+    except Exception as exc:
+        LOGGER.exception("Failed to load transcriber", exc_info=exc)
+        show_error_dialog(
+            "Failed to load speech recognition model. "
+            "Please check your internet connection and try again."
+        )
+        return 1
+
+    try:
+        runtime = AppRuntime(settings, transcriber)
     except HotkeyInUseError as exc:
         show_error_dialog(str(exc))
         return 1
@@ -283,6 +644,20 @@ def main() -> int:
             pass
 
     runtime.start()
+
+    # Complete startup timing
+    from app.metrics import STARTUP_BUDGET_MS
+
+    startup_event = metrics.stop(
+        "startup",
+        provider_detected=transcriber.provider,
+        provider_requested=getattr(transcriber, "provider_requested", ""),
+    )
+    if startup_event:
+        metrics.check_budget(
+            "startup_to_ready", startup_event.duration_ms, STARTUP_BUDGET_MS
+        )
+
     try:
         runtime.wait()
     finally:

@@ -19,6 +19,11 @@ class AppSettings:
     paste_window_seconds: float = 2.0
     start_with_windows: bool = False
     first_run_complete: bool = False
+    cleanup_mode: str = "standard"
+    cleanup_enabled: bool = True
+    auto_paste: bool = True
+    history_retention_days: int = 90
+    telemetry_enabled: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the settings to a dictionary."""
@@ -70,3 +75,23 @@ def default_settings_path() -> Path:
     else:
         base = Path.home() / "AppData" / "Local"
     return base / "Parakeet" / "settings.json"
+
+
+def default_history_db_path() -> Path:
+    """Resolve the default path for the history database."""
+    local_app_data = os.getenv("LOCALAPPDATA")
+    if local_app_data:
+        base = Path(local_app_data)
+    else:
+        base = Path.home() / "AppData" / "Local"
+    return base / "Parakeet" / "history.db"
+
+
+def default_metrics_log_path() -> Path:
+    """Resolve the default path for performance metrics log."""
+    local_app_data = os.getenv("LOCALAPPDATA")
+    if local_app_data:
+        base = Path(local_app_data)
+    else:
+        base = Path.home() / "AppData" / "Local"
+    return base / "Parakeet" / "metrics.log"

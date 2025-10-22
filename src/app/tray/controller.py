@@ -25,6 +25,8 @@ class TrayMenuActions:
     toggle_recording: Callable[[], None]
     show_settings: Callable[[], None]
     show_history: Callable[[], None]
+    restart_app: Callable[[], None]
+    set_cleanup_enabled: Callable[[bool], None]
     set_start_with_windows: Callable[[bool], None]
     quit_app: Callable[[], None]
 
@@ -47,6 +49,7 @@ class TrayController:
         icon_factory: Optional[TrayIconFactory] = None,
         theme: Optional[TrayTheme] = None,
         start_with_windows: bool = False,
+        cleanup_enabled: bool = True,
         show_first_run_tip: bool = False,
     ) -> None:
         self._app_name = app_name
@@ -61,6 +64,7 @@ class TrayController:
         self._spinner_stop = threading.Event()
         self._current_frame = 0
         self._start_with_windows = start_with_windows
+        self._cleanup_enabled = cleanup_enabled
         self._show_first_run_tip = show_first_run_tip
 
     @property
@@ -85,7 +89,7 @@ class TrayController:
         menu = self._build_menu()
         image = self._icon_factory.frame(self._state, self._theme, self._display_size)
         icon = pystray.Icon(
-            self._app_name, image=image, title=self._app_name, menu=menu
+            self._app_name, icon=image, title=self._app_name, menu=menu
         )
         self._icon = icon
         if self._show_first_run_tip:
@@ -120,6 +124,12 @@ class TrayController:
         """Flip the start-with-Windows flag and notify callbacks."""
         self._start_with_windows = not self._start_with_windows
         self._menu_actions.set_start_with_windows(self._start_with_windows)
+        if self._icon:
+            self._icon.update_menu()
+
+    def toggle_cleanup_enabled(self) -> None:
+        self._cleanup_enabled = not self._cleanup_enabled
+        self._menu_actions.set_cleanup_enabled(self._cleanup_enabled)
         if self._icon:
             self._icon.update_menu()
 
@@ -158,6 +168,12 @@ class TrayController:
             ),
             pystray.MenuItem("Settings", self._wrap(self._menu_actions.show_settings)),
             pystray.MenuItem("History", self._wrap(self._menu_actions.show_history)),
+            pystray.MenuItem("Restart", self._wrap(self._menu_actions.restart_app)),
+            pystray.MenuItem(
+                "Smart Cleanup",
+                self._wrap(lambda: self.toggle_cleanup_enabled()),
+                checked=lambda _: self._cleanup_enabled,
+            ),
             pystray.MenuItem(
                 "Start with Windows",
                 self._wrap(lambda: self.toggle_start_with_windows()),
@@ -186,6 +202,21 @@ def detect_tray_theme() -> TrayTheme:
     except ModuleNotFoundError:  # pragma: no cover - not running on Windows
         return TrayTheme.LIGHT
 
+    # Check for high-contrast mode first
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Control Panel\Accessibility\HighContrast",
+        ) as key:  # type: ignore[attr-defined]
+            flags, _ = winreg.QueryValueEx(key, "Flags")
+            # HCF_HIGHCONTRASTON = 0x01
+            if int(flags) & 0x01:
+                _LOGGER.info("High-contrast mode detected")
+                return TrayTheme.HIGH_CONTRAST
+    except (FileNotFoundError, OSError):
+        pass  # High-contrast not enabled or key not found
+
+    # Check light/dark theme preference
     key_path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
     value_name = "AppsUseLightTheme"
     try:
