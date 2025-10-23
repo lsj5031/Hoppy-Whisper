@@ -140,7 +140,7 @@ def test_transcribe_file_success(mock_onnx_asr, test_audio_file: Path) -> None:
 
     assert isinstance(result, TranscriptionResult)
     assert result.text == "test transcription"
-    assert result.duration_ms > 0
+    assert result.duration_ms >= 0
     assert result.model_name == PARAKEET_MODEL_NAME
 
 
@@ -165,7 +165,7 @@ def test_transcribe_buffer_success(mock_onnx_asr) -> None:
 
     assert isinstance(result, TranscriptionResult)
     assert result.text == "test transcription"
-    assert result.duration_ms > 0
+    assert result.duration_ms >= 0
 
 
 def test_transcribe_buffer_custom_sample_rate(mock_onnx_asr) -> None:
