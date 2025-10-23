@@ -160,6 +160,26 @@ try:
 except Exception:
     pass
 
+# Bundle model assets from local cache if present (for offline distribution)
+try:
+    cache_dir = Path(os.environ.get('LOCALAPPDATA', Path.home() / '.local' / 'share')) / 'Parakeet' / 'models'
+    model_files = [
+        'encoder-model.onnx',
+        'decoder_joint-model.onnx',
+        'vocab.txt',
+        'encoder-model.onnx.data',
+        'nemo128.onnx',
+    ]
+    for _fname in model_files:
+        _fpath = cache_dir / _fname
+        if _fpath.exists():
+            # Place under dist/Parakeet/models/
+            datas.append((str(_fpath), 'models'))
+        else:
+            print(f"[Parakeet.spec] Warning: {_fname} not found in {cache_dir}; skip bundling")
+except Exception:
+    pass
+
 a = Analysis(
     [SCRIPT],
     pathex=[],
@@ -185,7 +205,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

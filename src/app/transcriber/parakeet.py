@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -119,18 +121,61 @@ class ParakeetTranscriber:
         if self._providers:
             logger.info(f"Requested providers: {self._providers}")
 
-        # Load the model (downloads if not cached)
+        # Resolve local model directory (prefer bundled models when frozen)
+        local_model_dir: Path | None = None
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            try:
+                from .model_manager import get_model_manager
+
+                enc, dec, voc = get_model_manager().ensure_models()
+                # Parent dir should contain all required assets
+                candidate = enc.parent
+                if candidate.exists():
+                    local_model_dir = candidate
+            except Exception:
+                # Best-effort; continue and let onnx_asr decide
+                local_model_dir = None
+
+        # Suppress progress bars in windowed builds to avoid tqdm writing to None
+        os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+        os.environ.setdefault("TQDM_DISABLE", "1")
+        # Prefer offline mode when we have a local directory
+        if local_model_dir is not None:
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+        # Load the model (use model name + model_dir when available; otherwise, repo name)
         try:
             # Prefer passing providers if the API supports it; otherwise rely on
             # our ORT monkey-patch above to enforce provider order.
-            try:
-                self._model = onnx_asr.load_model(
-                    PARAKEET_MODEL_NAME,
-                    providers=self._providers,
-                    provider_options=self._provider_options,
-                )
-            except TypeError:
-                self._model = onnx_asr.load_model(PARAKEET_MODEL_NAME)
+            if local_model_dir is not None:
+                # Bundled case: pass known model name with explicit model_dir
+                try:
+                    logger.info(f"Loading model locally from: {local_model_dir}")
+                    self._model = onnx_asr.load_model(
+                        PARAKEET_MODEL_NAME,
+                        model_dir=str(local_model_dir),
+                        providers=self._providers,
+                        provider_options=self._provider_options,
+                    )
+                except TypeError:
+                    # Fallbacks for older signatures
+                    try:
+                        self._model = onnx_asr.load_model(
+                            PARAKEET_MODEL_NAME,
+                            model_dir=str(local_model_dir),
+                        )
+                    except TypeError:
+                        self._model = onnx_asr.load_model(PARAKEET_MODEL_NAME)
+            else:
+                # Non-frozen or no local bundle: use repo name, allow download/cache
+                try:
+                    self._model = onnx_asr.load_model(
+                        PARAKEET_MODEL_NAME,
+                        providers=self._providers,
+                        provider_options=self._provider_options,
+                    )
+                except TypeError:
+                    self._model = onnx_asr.load_model(PARAKEET_MODEL_NAME)
         except Exception as e:
             if isinstance(e, ModuleNotFoundError) and e.name == "huggingface_hub":
                 friendly = (

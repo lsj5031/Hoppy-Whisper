@@ -121,18 +121,18 @@ try {
     }
 
     # Build with PyInstaller
-    Write-Step "Building executable with PyInstaller..."
+    Write-Step "Building executable with PyInstaller (onefile)..."
     $buildArgs = @("-m", "poetry", "run", "pyinstaller", "--noconfirm")
     if ($Clean) {
         $buildArgs += "--clean"
     }
-    $buildArgs += "Parakeet.spec"
+    $buildArgs += "Parakeet_onefile.spec"
 
     $buildStart = Get-Date
     & python @buildArgs
     $buildDuration = (Get-Date) - $buildStart
 
-    $exePath = "dist\Parakeet\Parakeet.exe"
+    $exePath = "dist\Parakeet-OneFile.exe"
 if (-not (Test-Path $exePath)) {
         Write-Error "Build failed: $exePath not found"
         exit 1
@@ -181,6 +181,6 @@ if (-not (Test-Path $exePath)) {
 
 Write-Host ""
 Write-Host 'Next steps:' -ForegroundColor Yellow
-Write-Host "  - Test the executable: .\dist\Parakeet\Parakeet.exe"
-Write-Host "  - Create zip for distribution: Compress-Archive dist\Parakeet\* Parakeet-windows-x86_64.zip"
+Write-Host "  - Test the executable: .\dist\Parakeet-OneFile.exe"
+Write-Host "  - Distribute the single EXE above (models are bundled)"
 Write-Host '  - Run smoke tests: See SMOKE_TEST.md'

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 import urllib.request
+import sys
 
 # Expose urlopen at module scope for test patching; wrapper forwards to urllib
 def urlopen(*args, **kwargs):  # type: ignore[override]
@@ -100,9 +101,22 @@ class ModelManager:
 
         logger.info(f"Model cache directory: {self.cache_dir}")
 
+    def _bundled_model_path(self, asset: ModelAsset) -> Path | None:
+        """Return path to bundled asset when running from a frozen build."""
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            p = Path(getattr(sys, "_MEIPASS")) / "models" / asset.name
+            if p.exists():
+                return p
+        return None
+
     def get_model_path(self, asset: ModelAsset) -> Path:
-        """Get the local path for a model asset."""
-        return self.cache_dir / asset.name
+        """Get the preferred local path for a model asset.
+
+        In frozen builds, prefer bundled models under sys._MEIPASS/models.
+        Otherwise, use the writable cache directory.
+        """
+        bundled = self._bundled_model_path(asset)
+        return bundled if bundled is not None else (self.cache_dir / asset.name)
 
     def is_downloaded(self, asset: ModelAsset) -> bool:
         """Check if a model asset is already downloaded."""
@@ -248,28 +262,22 @@ class ModelManager:
         Raises:
             RuntimeError: If any model fails to download
         """
-        encoder_path = self.download_asset(
-            self.manifest.encoder,
-            lambda d, t: progress_callback("encoder", d, t) if progress_callback else None,
-        )
+        def _resolve(asset: ModelAsset, tag: str) -> Path:
+            bundled = self._bundled_model_path(asset)
+            if bundled is not None:
+                logger.info(f"Using bundled model: {asset.name}")
+                return bundled
+            return self.download_asset(
+                asset,
+                lambda d, t: progress_callback(tag, d, t) if progress_callback else None,
+            )
 
-        decoder_path = self.download_asset(
-            self.manifest.decoder,
-            lambda d, t: progress_callback("decoder", d, t) if progress_callback else None,
-        )
-
-        vocab_path = self.download_asset(
-            self.manifest.vocab,
-            lambda d, t: progress_callback("vocab", d, t) if progress_callback else None,
-        )
+        encoder_path = _resolve(self.manifest.encoder, "encoder")
+        decoder_path = _resolve(self.manifest.decoder, "decoder")
+        vocab_path = _resolve(self.manifest.vocab, "vocab")
 
         for extra in self.manifest.extra_assets:
-            self.download_asset(
-                extra,
-                lambda d, t, name=extra.name: progress_callback(name, d, t)
-                if progress_callback
-                else None,
-            )
+            _ = _resolve(extra, extra.name)
 
         return encoder_path, decoder_path, vocab_path
 
