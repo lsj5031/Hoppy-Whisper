@@ -141,13 +141,37 @@ def test_audio_recorder_handles_repeated_stop_calls():
 
 def test_audio_recorder_handles_repeated_start_calls():
     """Test that calling start() multiple times logs warning but doesn't crash."""
+    from unittest.mock import MagicMock, patch
+
+    import sounddevice as sd
+
     recorder = AudioRecorder()
 
+    # Mock sounddevice to simulate a working device
+    fake_device = {
+        'name': 'Test Device',
+        'max_input_channels': 2,
+        'default_samplerate': 16000
+    }
+
+    original_default = sd.default.device
+
     try:
-        recorder.start()
-        # Second start should log warning but not crash
-        recorder.start()  # Should log warning and return
+        with patch('sounddevice.query_devices') as mock_query:
+            mock_query.return_value = [fake_device]
+            with patch('sounddevice.InputStream') as mock_stream:
+                # Mock the stream to avoid actual audio capture
+                mock_instance = MagicMock()
+                mock_stream.return_value = mock_instance
+
+                # Ensure default device points to our fake device
+                sd.default.device = (0, -1)
+
+                recorder.start()
+                # Second start should log warning but not crash
+                recorder.start()  # Should log warning and return
     finally:
+        sd.default.device = original_default
         recorder.stop()
 
 
