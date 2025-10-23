@@ -42,3 +42,7 @@ Thumbs.db
 *.spec
 !Parakeet.spec
 !Parakeet_onefile.spec
+
+# CI/runtime artifacts (should not be tracked)
+/droid-output.txt
+/prompt.txt
