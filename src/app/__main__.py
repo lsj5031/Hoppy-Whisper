@@ -134,7 +134,9 @@ class AppRuntime:
         path = default_settings_path()
         self._settings.save(path)
         try:
-            import subprocess, os, sys
+            import os
+            import subprocess
+            import sys
             if sys.platform == "win32":
                 subprocess.Popen(["notepad.exe", str(path)])
             else:
@@ -196,7 +198,10 @@ class AppRuntime:
                 self._audio_recorder.set_on_frames(self._on_audio_chunk)
             except Exception:
                 # VAD is best-effort; continue without auto-stop if initialization fails
-                LOGGER.debug("VAD initialization failed; continuing without auto-stop", exc_info=True)
+                LOGGER.debug(
+                    "VAD initialization failed; continuing without auto-stop",
+                    exc_info=True,
+                )
                 self._vad = None
                 self._audio_recorder.set_on_frames(None)
 
@@ -221,7 +226,10 @@ class AppRuntime:
         # Ignore Shift-bypass; cleanup is controlled by settings
         self._bypass_cleanup = False
         if bypass_cleanup and getattr(self._settings, "cleanup_enabled", True):
-            LOGGER.debug("Hotkey released with Shift: ignoring bypass; using configured cleanup setting")
+            LOGGER.debug(
+                "Hotkey released with Shift: ignoring bypass; "
+                "using configured cleanup setting"
+            )
         else:
             LOGGER.debug("Hotkey released: stop recording")
         self._recording_active = False
@@ -362,7 +370,9 @@ class AppRuntime:
                     result.duration_ms,
                     budget,
                     provider_detected=detected,
-                    provider_requested=getattr(self._transcriber, "provider_requested", ""),
+                    provider_requested=getattr(
+                        self._transcriber, "provider_requested", ""
+                    ),
                 )
 
             self._schedule_idle_reset()
@@ -391,7 +401,8 @@ class AppRuntime:
         """
         try:
             # Small delay to ensure context switch
-            import time, sys
+            import sys
+            import time
             time.sleep(0.18)
 
             if sys.platform == "win32":
@@ -582,7 +593,9 @@ def configure_logging() -> None:
         from logging.handlers import RotatingFileHandler
         log_path = default_metrics_log_path().with_name("parakeet.log")
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        fh = RotatingFileHandler(str(log_path), maxBytes=1_000_000, backupCount=2, encoding="utf-8")
+        fh = RotatingFileHandler(
+            str(log_path), maxBytes=1_000_000, backupCount=2, encoding="utf-8"
+        )
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(fmt)
         handlers.append(fh)

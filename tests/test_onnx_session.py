@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.transcriber.onnx_session import (
     OnnxSessionManager,
-    ProviderInfo,
     get_session_manager,
 )
 
@@ -139,7 +137,9 @@ class TestOnnxSessionManager:
         with patch.dict("sys.modules", {"onnxruntime": None}):
             manager = OnnxSessionManager()
 
-            with pytest.raises(RuntimeError, match="onnxruntime-directml not installed"):
+            with pytest.raises(
+                RuntimeError, match="onnxruntime-directml not installed"
+            ):
                 manager.create_session("model.onnx")
 
     def test_create_session_handles_failure(self) -> None:

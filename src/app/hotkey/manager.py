@@ -158,8 +158,12 @@ class HotkeyManager:
                     self._active = False
                     self._last_release_time = 0.0
                     # Check if Shift is currently held to optionally bypass cleanup
-                    bypass_cleanup = any(vk in self._pressed for vk in [0x10, 0xA0, 0xA1])
-                    self._dispatch_with_bypass(self._callbacks.on_record_stop, bypass_cleanup)
+                    bypass_cleanup = any(
+                        vk in self._pressed for vk in [0x10, 0xA0, 0xA1]
+                    )
+                    self._dispatch_with_bypass(
+                        self._callbacks.on_record_stop, bypass_cleanup
+                    )
                 return
             # Hold/release mode
             if self._active:
@@ -197,7 +201,11 @@ class HotkeyManager:
             self._dispatch_with_bypass(self._callbacks.on_record_stop, bypass_cleanup)
 
     def _parse_and_validate(self, chord_input: str | HotkeyChord) -> HotkeyChord:
-        chord = chord_input if isinstance(chord_input, HotkeyChord) else parse_hotkey(chord_input)
+        chord = (
+            chord_input
+            if isinstance(chord_input, HotkeyChord)
+            else parse_hotkey(chord_input)
+        )
         self._ensure_hotkey_available(chord)
         return chord
 
@@ -212,7 +220,8 @@ class HotkeyManager:
         if not user32.RegisterHotKey(None, 0, modifiers, virtual_key):
             error_code = ctypes.get_last_error()
             # Treat unknown failures as already-registered in availability probe
-            if error_code in (0, 1409):  # ERROR_SUCCESS or ERROR_HOTKEY_ALREADY_REGISTERED
+            # ERROR_SUCCESS or ERROR_HOTKEY_ALREADY_REGISTERED
+            if error_code in (0, 1409):
                 raise HotkeyInUseError(
                     f"Hotkey '{chord.display}' is already registered"
                 )
@@ -235,7 +244,8 @@ class HotkeyManager:
                     f"Hotkey '{self._chord.display}' is already registered"
                 )
             raise HotkeyRegistrationError(
-                f"Failed to register hotkey '{self._chord.display}' (error {error_code})"
+                f"Failed to register hotkey '{self._chord.display}' "
+                f"(error {error_code})"
             )
         self._registered = True
 

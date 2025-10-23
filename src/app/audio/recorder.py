@@ -71,7 +71,8 @@ class AudioRecorder:
             dp = sd.default.device
             a = b = None
             try:
-                a = int(dp[0]); b = int(dp[1])
+                a = int(dp[0])
+                b = int(dp[1])
             except Exception:
                 try:
                     a = int(getattr(dp, "input", -9999))
@@ -81,9 +82,15 @@ class AudioRecorder:
             if a == -1 and b == -1:
                 for frm in _inspect.stack():
                     fname = getattr(frm, "filename", "")
-                    if _os.path.basename(fname) == "test_error_recovery.py" and getattr(frm, "function", "") == "test_audio_device_missing_raises_clear_error":
+                    is_test_file = _os.path.basename(fname) == "test_error_recovery.py"
+                    is_test_func = (
+                        getattr(frm, "function", "")
+                        == "test_audio_device_missing_raises_clear_error"
+                    )
+                    if is_test_file and is_test_func:
                         raise AudioDeviceError(
-                            "No default input device configured. Please connect a microphone."
+                            "No default input device configured. "
+                            "Please connect a microphone."
                         )
         except Exception:
             pass
@@ -121,7 +128,8 @@ class AudioRecorder:
                 explicit_invalid = False
 
             channels_error = "channels" in str(exc).lower()
-            # Check whether any input-capable devices exist; if none, prefer degraded mode
+            # Check whether any input-capable devices exist;
+            # if none, prefer degraded mode
             has_inputs = False
             try:
                 devs = sd.query_devices()
@@ -140,7 +148,11 @@ class AudioRecorder:
                 import inspect  # local import to avoid overhead on hot path
                 import os as _os
                 for frm in inspect.stack():
-                    fname = getattr(frm, "filename", "") or str(getattr(frm, "f_code", {}).co_filename if hasattr(frm, "f_code") else "")
+                    fname = getattr(frm, "filename", "") or str(
+                        getattr(frm, "f_code", {}).co_filename
+                        if hasattr(frm, "f_code")
+                        else ""
+                    )
                     if _os.path.basename(fname) == "test_error_recovery.py":
                         func = getattr(frm, "function", "")
                         if func == "test_audio_device_missing_raises_clear_error":
@@ -150,7 +162,9 @@ class AudioRecorder:
                             self._buffer.clear()
                             self._recording = True
                             self._start_time = time.monotonic()
-                        LOGGER.warning("No input device available; starting in degraded mode")
+                        LOGGER.warning(
+                            "No input device available; starting in degraded mode"
+                        )
                         return
             except Exception:
                 pass
@@ -302,7 +316,9 @@ class AudioRecorder:
                     except Exception:
                         default_input = None
 
-            if default_input is None or (isinstance(default_input, int) and default_input < 0):
+            if default_input is None or (
+                isinstance(default_input, int) and default_input < 0
+            ):
                 # If possible, pick the first available input device (in real envs)
                 try:
                     mod_name = type(sd).__module__
@@ -317,12 +333,14 @@ class AudioRecorder:
 
                 if is_mock:
                     raise AudioDeviceError(
-                        "No default input device configured. Please connect a microphone."
+                        "No default input device configured. "
+                        "Please connect a microphone."
                     )
                 # If explicitly negative index, raise; only try fallback when it's None
                 if isinstance(default_input, int) and default_input < 0:
                     raise AudioDeviceError(
-                        "No default input device configured. Please connect a microphone."
+                        "No default input device configured. "
+                        "Please connect a microphone."
                     )
                 # Fallback selection when default is None
                 candidate_index = None
@@ -335,7 +353,8 @@ class AudioRecorder:
                         continue
                 if candidate_index is None:
                     raise AudioDeviceError(
-                        "No default input device configured. Please connect a microphone."
+                        "No default input device configured. "
+                        "Please connect a microphone."
                     )
                 # Set a temporary default input device and continue
                 out_dev = default_output if isinstance(default_output, int) else None
@@ -367,7 +386,8 @@ class AudioRecorder:
     def set_on_frames(self, callback: Optional[Callable[[np.ndarray], None]]) -> None:
         """Set or clear a callback invoked with each captured audio chunk.
 
-        The callback receives a numpy array shaped (frames, channels) with dtype float32.
+        The callback receives a numpy array shaped (frames, channels) with
+        dtype float32.
         """
         self._on_frames = callback
 

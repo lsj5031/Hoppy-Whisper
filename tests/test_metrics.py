@@ -3,8 +3,6 @@
 import time
 from pathlib import Path
 
-import pytest
-
 from app.metrics import (
     STARTUP_BUDGET_MS,
     TRANSCRIBE_BUDGET_CPU_MS,

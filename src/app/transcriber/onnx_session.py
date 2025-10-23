@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import Any
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +164,7 @@ def ensure_ort_dll_search_paths() -> None:
     """
     try:
         if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-            base = Path(getattr(sys, "_MEIPASS"))
+            base = Path(sys._MEIPASS)
             candidates = (
                 base / "onnxruntime" / "capi",
                 base / "onnxruntime" / "providers" / "dml",
@@ -178,7 +178,9 @@ def ensure_ort_dll_search_paths() -> None:
                 try:
                     if p.is_dir():
                         os.add_dll_directory(str(p))  # type: ignore[attr-defined]
-                        os.environ["PATH"] = str(p) + os.pathsep + os.environ.get("PATH", "")
+                        os.environ["PATH"] = (
+                            str(p) + os.pathsep + os.environ.get("PATH", "")
+                        )
                 except Exception:
                     continue
     except Exception:

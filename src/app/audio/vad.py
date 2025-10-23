@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
+import warnings
 
 import numpy as np
-import warnings
 
 # Suppress deprecation warning emitted by webrtcvad importing pkg_resources
 with warnings.catch_warnings():

@@ -13,7 +13,7 @@ def main() -> None:
 
     providers, options = manager.get_providers()
     print("\nSelected providers:")
-    for i, (provider, opts) in enumerate(zip(providers, options)):
+    for i, (provider, opts) in enumerate(zip(providers, options, strict=False)):
         print(f"  {i + 1}. {provider}")
         if opts:
             print(f"     Options: {opts}")

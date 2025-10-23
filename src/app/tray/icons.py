@@ -82,7 +82,7 @@ class TrayIconFactory:
             result[size] = frames
         return result
 
-    @lru_cache(maxsize=256)
+    @lru_cache(maxsize=256)  # noqa: B019
     def _load_frame(self, key: _IconKey) -> Image.Image:
         """Generate the icon for the supplied cache key."""
         size = key.size

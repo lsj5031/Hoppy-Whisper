@@ -23,8 +23,8 @@ def load_transcriber() -> ParakeetTranscriber:
 
     Uses a late import of get_transcriber to make it patch-friendly in tests.
     """
-    from .onnx_session import get_session_manager
     from . import parakeet as parakeet_module
+    from .onnx_session import get_session_manager
 
     session_manager = get_session_manager()
     providers, provider_options = session_manager.get_providers()
