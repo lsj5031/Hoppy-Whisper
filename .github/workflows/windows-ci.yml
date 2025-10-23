@@ -54,48 +54,50 @@ jobs:
       - name: Run tests
         run: poetry run pytest
 
-      - name: Build PyInstaller bundle
+      - name: Prefetch models for bundling
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         run: |
-          # Ensure proper DLL collection with PyInstaller
-          poetry run pyinstaller --noconfirm --clean --collect-all onnxruntime --debug=all Parakeet.spec
+          $code = @'
+          import os, shutil
+          from pathlib import Path
+          from huggingface_hub import hf_hub_download as dl
+          repo = "istupakov/parakeet-tdt-0.6b-v3-onnx"
+          files = [
+              "encoder-model.onnx",
+              "decoder_joint-model.onnx",
+              "vocab.txt",
+              "encoder-model.onnx.data",
+              "nemo128.onnx",
+          ]
+          appdata = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local" / "share"))
+          cache = appdata / "Parakeet" / "models"
+          cache.mkdir(parents=True, exist_ok=True)
+          for f in files:
+              src = dl(repo_id=repo, filename=f)
+              shutil.copy2(src, cache / f)
+          print("Prefetched models to:", cache)
+          '@
+          Set-Content -Path prefetch_models.py -Value $code
+          poetry run python prefetch_models.py
+
+      - name: Build PyInstaller (onefile)
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+        run: |
+          poetry run pyinstaller --noconfirm --clean Parakeet_onefile.spec
 
       - name: Verify build output
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         run: |
-          if (-not (Test-Path -Path "dist\Parakeet" -PathType Container)) {
-            throw "PyInstaller did not produce dist\Parakeet directory"
+          if (-not (Test-Path -Path "dist\Parakeet-OneFile.exe")) {
+            throw "Parakeet-OneFile.exe not found in dist directory"
           }
-          if (-not (Test-Path -Path "dist\Parakeet\Parakeet.exe")) {
-            throw "Parakeet.exe not found in dist directory"
-          }
-          
-          # Check for required DLLs
-          Write-Host "Checking for critical DLLs..."
-          $criticalDlls = @("onnxruntime.dll", "msvcp140.dll", "vcruntime140.dll")
-          foreach ($dll in $criticalDlls) {
-            $found = Get-ChildItem -Path "dist\Parakeet" -Recurse -Name $dll -ErrorAction SilentlyContinue
-            if ($found) {
-              Write-Host "[OK] Found $dll"
-            } else {
-              Write-Host "[WARNING] Missing $dll"
-            }
-          }
-
-      - name: Archive executable
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
-        run: |
-          if (-not (Test-Path -Path "dist\\Parakeet\\Parakeet.exe")) {
-            throw 'PyInstaller did not produce dist\\Parakeet directory'
-          }
-          Compress-Archive -Path "dist\\Parakeet\\*" -DestinationPath dist\\Parakeet-windows-x86_64.zip -Force
 
       - name: Upload artifact
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         uses: actions/upload-artifact@v4
         with:
-          name: parakeet-windows
-          path: dist/Parakeet-windows-x86_64.zip
+          name: parakeet-windows-onefile
+          path: dist/Parakeet-OneFile.exe
           if-no-files-found: error
 
   release:
@@ -107,11 +109,11 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: parakeet-windows
+          name: parakeet-windows-onefile
           path: release
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: release/Parakeet-windows-x86_64.zip
+          files: release/Parakeet-OneFile.exe
           generate_release_notes: true
