@@ -37,7 +37,8 @@ class ParakeetTranscriber:
         """Initialize the Parakeet transcriber.
 
         Args:
-            model_path: Path to model directory (encoder/decoder/vocab). If None, uses default.
+            model_path: Path to model directory (encoder/decoder/vocab).
+                If None, uses default.
             providers: ONNX Runtime providers list. If None, auto-detected.
             provider_options: Provider options list. If None, uses defaults.
         """
@@ -97,7 +98,7 @@ class ParakeetTranscriber:
             # Only patch once per process
             if not getattr(ort, "_parakeet_patched", False):
                 ort.InferenceSession = _PatchedInferenceSession  # type: ignore[assignment]
-                setattr(ort, "_parakeet_patched", True)
+                ort._parakeet_patched = True
         except Exception:
             # If ORT isn't available yet or patch fails, continue without it.
             pass
@@ -143,7 +144,8 @@ class ParakeetTranscriber:
         if local_model_dir is not None:
             os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
-        # Load the model (use model name + model_dir when available; otherwise, repo name)
+        # Load the model (use model name + model_dir when available;
+        # otherwise, repo name)
         try:
             # Prefer passing providers if the API supports it; otherwise rely on
             # our ORT monkey-patch above to enforce provider order.
@@ -179,7 +181,8 @@ class ParakeetTranscriber:
         except Exception as e:
             if isinstance(e, ModuleNotFoundError) and e.name == "huggingface_hub":
                 friendly = (
-                    "huggingface-hub not installed. Install it to download model assets."
+                    "huggingface-hub not installed. "
+                    "Install it to download model assets."
                 )
             else:
                 friendly = str(e)
@@ -232,7 +235,8 @@ class ParakeetTranscriber:
     def _update_provider_detection(self) -> None:
         """Update provider_detected based on available ONNX Runtime providers.
 
-        This reflects environment capability, not a guaranteed runtime binding of onnx_asr.
+        This reflects environment capability, not a guaranteed runtime binding
+        of onnx_asr.
         """
         try:
             # Lazy import to avoid circular dependencies
@@ -294,7 +298,9 @@ class ParakeetTranscriber:
             logger.error(f"Transcription failed: {e}")
             raise RuntimeError(f"Transcription failed: {e}") from e
 
-    def transcribe_buffer(self, audio_data: bytes, sample_rate: int = 16000) -> TranscriptionResult:
+    def transcribe_buffer(
+        self, audio_data: bytes, sample_rate: int = 16000
+    ) -> TranscriptionResult:
         """Transcribe audio from a buffer.
 
         Args:

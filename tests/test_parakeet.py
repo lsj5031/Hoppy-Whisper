@@ -20,10 +20,10 @@ def mock_onnx_asr():
     """Mock the onnx_asr module."""
     mock_model = MagicMock()
     mock_model.recognize.return_value = "test transcription"
-    
+
     mock_module = MagicMock()
     mock_module.load_model.return_value = mock_model
-    
+
     with patch.dict("sys.modules", {"onnx_asr": mock_module}):
         yield mock_module
 
@@ -67,9 +67,9 @@ def test_ensure_model_loaded_import_error() -> None:
     """Test model loading with missing onnx_asr."""
     # Remove onnx_asr from sys.modules if it exists
     import sys
-    
+
     saved_module = sys.modules.pop("onnx_asr", None)
-    
+
     try:
         with patch.dict("sys.modules", {"onnx_asr": None}):
             transcriber = ParakeetTranscriber()
@@ -201,7 +201,9 @@ def test_get_transcriber_with_providers() -> None:
 
     parakeet_module._transcriber = None
 
-    transcriber = get_transcriber(providers=providers, provider_options=provider_options)
+    transcriber = get_transcriber(
+        providers=providers, provider_options=provider_options
+    )
 
     assert transcriber._providers == providers
     assert transcriber._provider_options == provider_options

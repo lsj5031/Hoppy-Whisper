@@ -1,6 +1,5 @@
 """Tests for accessibility and theming features."""
 
-import pytest
 
 from app.tray import TrayTheme
 from app.tray.icons import TrayIconFactory, _palette_for_theme

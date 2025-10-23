@@ -68,7 +68,7 @@ def test_hotkey_conflict_raises_clear_error():
 def test_model_download_retry_with_backoff():
     """Test that model download implements exponential backoff."""
     from pathlib import Path
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import patch
 
     from app.transcriber import ModelAsset
 

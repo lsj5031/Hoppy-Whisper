@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 from app.cleanup import CleanupEngine, CleanupMode
 
 
@@ -19,7 +17,8 @@ def test_cleanup_engine_with_standard_mode():
 
 def test_bypass_cleanup_preserves_raw_text():
     """Test that bypassing cleanup preserves the raw transcription."""
-    engine = CleanupEngine(CleanupMode.STANDARD)
+    # Create an engine instance to ensure the class works
+    _ = CleanupEngine(CleanupMode.STANDARD)
     raw_text = "um hello world"
 
     # When bypass is active, we skip the cleanup entirely

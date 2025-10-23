@@ -1,18 +1,11 @@
 # Issue Context
-Title: [E0.2] Code quality & tooling (Ruff, Mypy, Pre-commit)
+Title: Fix all ruff lint errors
 
 Body:
-### Acceptance Criteria
-- Ruff lint rules configured; `poetry run ruff check` passes.
-- Mypy (or pyright) type checks pass for core modules (allow missing imports for C-ext).
-- Pre-commit hooks run ruff + formatting on commit.
-
-## Other Comments
-Comment by @lsj5031 on 2025-10-21T01:34:49Z:
-Depends on: #1
+make sure lint all passed properly
 
 ## Execution Options
 --skip-permissions-unsafe
 
 ## Request
-implement this
+fix ruff lint errors

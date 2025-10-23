@@ -5,11 +5,11 @@ search path and the PATH environment variable. Also proactively loads
 onnxruntime core DLLs when present to avoid initialization failures.
 """
 
+import ctypes
+import logging
 import os
 import sys
 from pathlib import Path
-import ctypes
-import logging
 
 # Setup logging for debugging
 LOGGER = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ if getattr(sys, "frozen", False):
     bases: list[Path] = []
     if hasattr(sys, "_MEIPASS"):
         try:
-            bases.append(Path(getattr(sys, "_MEIPASS")))  # type: ignore[attr-defined]
+            bases.append(Path(sys._MEIPASS))  # type: ignore[attr-defined]
         except Exception:
             pass
     try:
@@ -56,16 +56,16 @@ if getattr(sys, "frozen", False):
             # Add root dir (where VC++ DLLs are) to DLL search and PATH
             os.add_dll_directory(str(base))
             os.environ["PATH"] = str(base) + os.pathsep + os.environ.get("PATH", "")
-            
+
             # Core VC++ DLLs to preload
             vc_dlls = [
                 'msvcp140.dll',
-                'vcruntime140.dll', 
+                'vcruntime140.dll',
                 'vcruntime140_1.dll',
                 'msvcp140_atomic_wait.dll',
                 'ucrtbase.dll'
             ]
-            
+
             for dll in vc_dlls:
                 p = base / dll
                 if p.exists():
@@ -92,7 +92,10 @@ if getattr(sys, "frozen", False):
         debug_path: Path | None = None
         if debug:
             try:
-                log_dir = Path(os.environ.get("LOCALAPPDATA", str(bases[0] if bases else "."))) / "Parakeet"
+                localappdata = os.environ.get(
+                    "LOCALAPPDATA", str(bases[0] if bases else ".")
+                )
+                log_dir = Path(localappdata) / "Parakeet"
                 log_dir.mkdir(parents=True, exist_ok=True)
                 debug_path = log_dir / "ort_dll_debug.log"
                 with debug_path.open("a", encoding="utf-8") as fh:

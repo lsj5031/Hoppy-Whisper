@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 
@@ -65,8 +63,9 @@ def test_keyboard_controller_paste_simulation():
 
 def test_paste_window_timing():
     """Test that paste window timing is respected."""
-    from app.hotkey.manager import HotkeyManager, HotkeyCallbacks
     import time
+
+    from app.hotkey.manager import HotkeyCallbacks, HotkeyManager
 
     start_count = []
     stop_count = []

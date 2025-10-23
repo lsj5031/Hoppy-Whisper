@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
+import sys
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-import urllib.request
-import sys
+
 
 # Expose urlopen at module scope for test patching; wrapper forwards to urllib
 def urlopen(*args, **kwargs):  # type: ignore[override]
@@ -85,7 +85,8 @@ class ModelManager:
         """Initialize the model manager.
 
         Args:
-            cache_dir: Directory for cached models. Defaults to %LOCALAPPDATA%/Parakeet/models
+            cache_dir: Directory for cached models. Defaults to
+                %LOCALAPPDATA%/Parakeet/models
             manifest: Model manifest. Defaults to Parakeet TDT 0.6b v2
         """
         if cache_dir is None:
@@ -104,7 +105,7 @@ class ModelManager:
     def _bundled_model_path(self, asset: ModelAsset) -> Path | None:
         """Return path to bundled asset when running from a frozen build."""
         if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-            p = Path(getattr(sys, "_MEIPASS")) / "models" / asset.name
+            p = Path(sys._MEIPASS) / "models" / asset.name
             if p.exists():
                 return p
         return None
@@ -129,7 +130,8 @@ class ModelManager:
             actual_size = path.stat().st_size
             if actual_size != asset.size_bytes:
                 logger.warning(
-                    f"{asset.name} size mismatch: expected {asset.size_bytes}, got {actual_size}"
+                    f"{asset.name} size mismatch: expected {asset.size_bytes}, "
+                    f"got {actual_size}"
                 )
                 return False
 
@@ -138,7 +140,8 @@ class ModelManager:
             actual_hash = self._compute_sha256(path)
             if actual_hash != asset.sha256.lower():
                 logger.warning(
-                    f"{asset.name} hash mismatch: expected {asset.sha256}, got {actual_hash}"
+                    f"{asset.name} hash mismatch: expected {asset.sha256}, "
+                    f"got {actual_hash}"
                 )
                 return False
 
@@ -189,7 +192,8 @@ class ModelManager:
                     actual_size = path.stat().st_size
                     if actual_size != asset.size_bytes:
                         raise ValueError(
-                            f"Size mismatch: expected {asset.size_bytes}, got {actual_size}"
+                            f"Size mismatch: expected {asset.size_bytes}, "
+                            f"got {actual_size}"
                         )
 
                 if asset.sha256:
@@ -254,7 +258,8 @@ class ModelManager:
         """Ensure all required models are downloaded and valid.
 
         Args:
-            progress_callback: Optional callback(asset_name, downloaded_bytes, total_bytes)
+            progress_callback: Optional callback(asset_name, downloaded_bytes,
+                total_bytes)
 
         Returns:
             Tuple of (encoder_path, decoder_path, vocab_path)
@@ -269,7 +274,9 @@ class ModelManager:
                 return bundled
             return self.download_asset(
                 asset,
-                lambda d, t: progress_callback(tag, d, t) if progress_callback else None,
+                lambda d, t: (
+                    progress_callback(tag, d, t) if progress_callback else None
+                ),
             )
 
         encoder_path = _resolve(self.manifest.encoder, "encoder")
