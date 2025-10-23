@@ -8,7 +8,11 @@ onnxruntime core DLLs when present to avoid initialization failures.
 import os
 import sys
 from pathlib import Path
+import ctypes
 import logging
+
+# Setup logging for debugging
+LOGGER = logging.getLogger(__name__)
 
 # Prefer the capi dir first (where the .pyd and DLLs normally live)
 _CANDIDATES = (
@@ -45,6 +49,35 @@ if getattr(sys, "frozen", False):
         bases.append(exe_dir / "_internal")
     except Exception:
         pass
+
+    # Preload VC++ redistributable DLLs to ensure they're available
+    for base in bases:
+        try:
+            # Add root dir (where VC++ DLLs are) to DLL search and PATH
+            os.add_dll_directory(str(base))
+            os.environ["PATH"] = str(base) + os.pathsep + os.environ.get("PATH", "")
+            
+            # Core VC++ DLLs to preload
+            vc_dlls = [
+                'msvcp140.dll',
+                'vcruntime140.dll', 
+                'vcruntime140_1.dll',
+                'msvcp140_atomic_wait.dll',
+                'ucrtbase.dll'
+            ]
+            
+            for dll in vc_dlls:
+                p = base / dll
+                if p.exists():
+                    try:
+                        ctypes.WinDLL(str(p))  # Preload
+                        LOGGER.debug(f"Preloaded VC++ DLL: {dll}")
+                    except Exception as e:
+                        if os.environ.get("PARAKEET_ORT_DEBUG"):
+                            LOGGER.warning(f"Failed to preload {dll}: {e}")
+        except Exception as e:
+            if os.environ.get("PARAKEET_ORT_DEBUG"):
+                LOGGER.warning(f"Failed to setup VC++ DLL preloading: {e}")
 
     for base in bases:
         _add_dir(str(base))

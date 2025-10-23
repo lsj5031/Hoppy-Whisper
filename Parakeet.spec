@@ -24,6 +24,14 @@ try:
         _pkg_dir = Path(_ort.__file__).parent
         _capi_dir = _pkg_dir / 'capi'
 
+        # Recursively collect all DLL files from onnxruntime package
+        for file_path in _pkg_dir.rglob("*"):
+            if file_path.is_file() and file_path.suffix in ('.dll', '.pyd'):
+                # Determine relative path and target directory (keeping structure)
+                rel_path = file_path.relative_to(_pkg_dir)
+                target_dir = f"onnxruntime/{rel_path.parent}" if rel_path.parent != Path(".") else "onnxruntime"
+                _ort_binaries.append((str(file_path), target_dir))
+
         core_names = [
             'onnxruntime.dll',
             'onnxruntime_providers_shared.dll',
@@ -35,6 +43,8 @@ try:
                 'onnxruntime_providers_directml.dll',
                 'DirectML.dll',
             ]
+
+        # Ensure these core DLLs are explicitly included in capi directory
         for _name in core_names:
             _p = _capi_dir / _name
             if _p.exists():
@@ -87,8 +97,32 @@ try:
         ):
             _p = _sys32 / _name
             if _p.exists():
-                # Place at _internal root
+                # Place at _internal root for maximum compatibility
                 _msvc_binaries.append((str(_p), '.'))
+                
+    # Also try to collect from vcpkg/conan installations if available
+    _vcpkg_paths = [
+        Path('C:/vcpkg/installed/x64-windows/bin'),
+        Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Redist/MSVC'),
+        Path('C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Redist/MSVC'),
+    ]
+    
+    for _vcpkg_base in _vcpkg_paths:
+        if not _vcpkg_base.exists():
+            continue
+            
+        # Look for the latest version subdirectory in MSVC
+        for _ver_dir in _vcpkg_base.glob('14.*'):
+            if not _ver_dir.is_dir():
+                continue
+            for _arch_dir in ['x64', 'x86', 'onecore']:
+                _bin_dir = _ver_dir / _arch_dir
+                if not _bin_dir.exists():
+                    continue
+                for _name in ('msvcp140_atomic_wait.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'ucrtbase.dll'):
+                    _p = _bin_dir / _name
+                    if _p.exists():
+                        _msvc_binaries.append((str(_p), '.'))
 except Exception:
     pass
 
@@ -116,6 +150,21 @@ datas = [
     ('src/app/py.typed', 'app'),
     (certifi.where(), 'certifi'),
 ]
+
+# Include onnx_asr preprocessors (e.g., nemo128.onnx) so the frozen app can read them
+try:
+    import onnx_asr as _asr  # type: ignore
+    _asr_pkg_dir = Path(_asr.__file__).parent
+    _pp_dir = _asr_pkg_dir / 'preprocessors'
+    if _pp_dir.exists():
+        for _f in _pp_dir.rglob('*'):
+            if _f.is_file():
+                _rel = _f.relative_to(_asr_pkg_dir)
+                # Preserve package-relative directory structure under _internal
+                datas.append((str(_f), str(_rel.parent)))
+except Exception:
+    # If onnx_asr isn't importable at spec-eval time, skip quietly
+    pass
 
 a = Analysis(
     [SCRIPT],

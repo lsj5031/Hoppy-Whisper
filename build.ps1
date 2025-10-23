@@ -64,21 +64,21 @@ function Write-Error {
 # Check Poetry is available
 Write-Step "Checking environment..."
 try {
-    $poetryVersion = poetry --version
+    $poetryVersion = python -m poetry --version
     Write-Success "Poetry found: $poetryVersion"
 } catch {
     Write-Error "Poetry not found. Please install Poetry first:"
-    Write-Host "  py -3.11 -m pip install poetry"
+    Write-Host "  python -m pip install poetry"
     exit 1
 }
 
 # Check Python version
 try {
-    $pythonVersion = poetry run python --version
+    $pythonVersion = python -m poetry run python --version
     Write-Success "Python: $pythonVersion"
 } catch {
     Write-Error "Poetry environment not set up correctly"
-    Write-Host "Run: poetry install --with dev"
+    Write-Host "Run: python -m poetry install --with dev"
     exit 1
 }
 
@@ -116,28 +116,29 @@ try {
     # Run tests unless skipped
     if (-not $SkipTests) {
         Write-Step "Running tests..."
-        poetry run pytest --tb=short
+        python -m poetry run pytest --tb=short
         Write-Success "Tests passed"
     }
 
     # Build with PyInstaller
     Write-Step "Building executable with PyInstaller..."
-    $buildArgs = @("run", "pyinstaller", "--noconfirm")
+    $buildArgs = @("-m", "poetry", "run", "pyinstaller", "--noconfirm")
     if ($Clean) {
         $buildArgs += "--clean"
     }
     $buildArgs += "Parakeet.spec"
 
     $buildStart = Get-Date
-    & poetry @buildArgs
+    & python @buildArgs
     $buildDuration = (Get-Date) - $buildStart
 
-    if (-not (Test-Path dist\Parakeet.exe)) {
-        Write-Error "Build failed: dist\Parakeet.exe not found"
+    $exePath = "dist\Parakeet\Parakeet.exe"
+if (-not (Test-Path $exePath)) {
+        Write-Error "Build failed: $exePath not found"
         exit 1
     }
 
-    $exeSize = (Get-Item dist\Parakeet.exe).Length / 1MB
+    $exeSize = (Get-Item $exePath).Length / 1MB
     Write-Success "Build completed in $($buildDuration.TotalSeconds.ToString('0.0'))s"
     Write-Host "Executable size: $($exeSize.ToString('0.0')) MB"
 
@@ -146,7 +147,7 @@ try {
         Write-Step "Testing executable..."
         Write-Host "Launching Parakeet.exe (press Ctrl+C to stop after verifying it works)"
         
-        $testProcess = Start-Process -FilePath "dist\Parakeet.exe" -PassThru -NoNewWindow
+        $testProcess = Start-Process -FilePath $exePath -PassThru -NoNewWindow
         
         # Give it a few seconds to start
         Start-Sleep -Seconds 3
@@ -167,7 +168,7 @@ try {
         }
     }
 
-    Write-Success "Build complete: dist\Parakeet.exe"
+    Write-Success "Build complete: $exePath"
 
 } finally {
     # Restore spec file if modified
@@ -180,6 +181,6 @@ try {
 
 Write-Host ""
 Write-Host 'Next steps:' -ForegroundColor Yellow
-Write-Host '  - Test the executable: .\dist\Parakeet.exe'
-Write-Host '  - Create zip for distribution: Compress-Archive dist\Parakeet.exe Parakeet-windows-x86_64.zip'
+Write-Host "  - Test the executable: .\dist\Parakeet\Parakeet.exe"
+Write-Host "  - Create zip for distribution: Compress-Archive dist\Parakeet\* Parakeet-windows-x86_64.zip"
 Write-Host '  - Run smoke tests: See SMOKE_TEST.md'
