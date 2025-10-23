@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from typing import Any
+import os
+import sys
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +32,13 @@ class OnnxSessionManager:
 
     def _detect_providers(self) -> None:
         """Detect available ONNX Runtime providers and prefer DirectML."""
+        ensure_ort_dll_search_paths()
         try:
             import onnxruntime as ort
-        except ImportError:
-            logger.warning("onnxruntime-directml not installed, falling back to CPU")
+        except ImportError as e:
+            logger.warning(
+                "onnxruntime import failed (%s); falling back to CPU", str(e)
+            )
             self._providers = ["CPUExecutionProvider"]
             self._provider_options = [{}]
             return
@@ -149,3 +155,32 @@ def get_session_manager() -> OnnxSessionManager:
     if _session_manager is None:
         _session_manager = OnnxSessionManager()
     return _session_manager
+
+
+def ensure_ort_dll_search_paths() -> None:
+    """Ensure DLL search paths include bundled ONNX Runtime locations in frozen apps.
+
+    Mirrors the runtime hook behavior for robustness.
+    """
+    try:
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            base = Path(getattr(sys, "_MEIPASS"))
+            candidates = (
+                base / "onnxruntime" / "capi",
+                base / "onnxruntime" / "providers" / "dml",
+                base / "onnxruntime",
+                base / "onnxruntime.libs",
+                base / "onnxruntime" / "libs",
+                base / "numpy.libs",
+                base,
+            )
+            for p in candidates:
+                try:
+                    if p.is_dir():
+                        os.add_dll_directory(str(p))  # type: ignore[attr-defined]
+                        os.environ["PATH"] = str(p) + os.pathsep + os.environ.get("PATH", "")
+                except Exception:
+                    continue
+    except Exception:
+        # Best effort only
+        pass

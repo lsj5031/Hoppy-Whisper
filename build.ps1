@@ -53,12 +53,12 @@ function Write-Step {
 
 function Write-Success {
     param([string]$Message)
-    Write-Host "✓ $Message" -ForegroundColor Green
+    Write-Host "[OK] $Message" -ForegroundColor Green
 }
 
 function Write-Error {
     param([string]$Message)
-    Write-Host "✗ $Message" -ForegroundColor Red
+    Write-Host "[ERR] $Message" -ForegroundColor Red
 }
 
 # Check Poetry is available
@@ -178,7 +178,8 @@ try {
     }
 }
 
-Write-Host "`nNext steps:" -ForegroundColor Yellow
-Write-Host "  • Test the executable: .\dist\Parakeet.exe"
-Write-Host "  • Create zip for distribution: Compress-Archive dist\Parakeet.exe Parakeet-windows-x86_64.zip"
-Write-Host "  • Run smoke tests: See SMOKE_TEST.md"
+Write-Host ""
+Write-Host 'Next steps:' -ForegroundColor Yellow
+Write-Host '  - Test the executable: .\dist\Parakeet.exe'
+Write-Host '  - Create zip for distribution: Compress-Archive dist\Parakeet.exe Parakeet-windows-x86_64.zip'
+Write-Host '  - Run smoke tests: See SMOKE_TEST.md'

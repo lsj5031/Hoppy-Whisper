@@ -59,9 +59,55 @@ class ParakeetTranscriber:
         if self._model is not None:
             return
 
+        # Ensure ORT DLL directories are available in frozen mode before imports
+        try:
+            from .onnx_session import ensure_ort_dll_search_paths
+            ensure_ort_dll_search_paths()
+        except Exception:
+            pass
+
+        # Best-effort: patch onnxruntime to default to DirectML if available
+        # This lets third-party libs that don't pass providers (e.g., onnx_asr)
+        # still pick up GPU acceleration without code changes upstream.
+        try:
+            import onnxruntime as ort  # type: ignore
+
+            # Resolve preferred providers from our session manager
+            try:
+                from .onnx_session import get_session_manager
+
+                provs, prov_opts = (
+                    (self._providers, self._provider_options)
+                    if self._providers is not None
+                    else get_session_manager().get_providers()
+                )
+            except Exception:
+                provs, prov_opts = (self._providers or ["CPUExecutionProvider"], [{}])
+
+            _OriginalIS = ort.InferenceSession
+
+            def _PatchedInferenceSession(*args, **kwargs):  # type: ignore
+                if "providers" not in kwargs or kwargs.get("providers") is None:
+                    kwargs["providers"] = provs
+                    kwargs["provider_options"] = prov_opts
+                return _OriginalIS(*args, **kwargs)
+
+            # Only patch once per process
+            if not getattr(ort, "_parakeet_patched", False):
+                ort.InferenceSession = _PatchedInferenceSession  # type: ignore[assignment]
+                setattr(ort, "_parakeet_patched", True)
+        except Exception:
+            # If ORT isn't available yet or patch fails, continue without it.
+            pass
+
         try:
             import onnx_asr
         except ImportError as e:
+            msg = str(e)
+            if "onnxruntime" in msg or "onnxruntime_pybind11_state" in msg:
+                raise RuntimeError(
+                    f"ONNX Runtime failed to load native bindings: {msg}"
+                ) from e
             raise RuntimeError(
                 "onnx-asr not installed. Please install it to use transcription."
             ) from e
@@ -69,16 +115,22 @@ class ParakeetTranscriber:
         logger.info("Loading Parakeet TDT 0.6b model...")
         start_time = time.time()
 
-        # Load the model with custom providers if specified
+        # Record requested providers for metrics/debugging
         if self._providers:
-            # onnx-asr may not directly support provider injection,
-            # so we'll rely on ONNX Runtime's default provider selection
-            # and the session manager's configuration
             logger.info(f"Requested providers: {self._providers}")
 
         # Load the model (downloads if not cached)
         try:
-            self._model = onnx_asr.load_model(PARAKEET_MODEL_NAME)
+            # Prefer passing providers if the API supports it; otherwise rely on
+            # our ORT monkey-patch above to enforce provider order.
+            try:
+                self._model = onnx_asr.load_model(
+                    PARAKEET_MODEL_NAME,
+                    providers=self._providers,
+                    provider_options=self._provider_options,
+                )
+            except TypeError:
+                self._model = onnx_asr.load_model(PARAKEET_MODEL_NAME)
         except Exception as e:
             if isinstance(e, ModuleNotFoundError) and e.name == "huggingface_hub":
                 friendly = (

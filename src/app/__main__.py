@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import sys
 import threading
@@ -333,8 +334,9 @@ class AppRuntime:
 
             # Auto-paste first to avoid focus issues from notifications
             if self._settings.auto_paste:
-                LOGGER.debug("Auto-paste enabled, performing paste")
-                self._perform_paste()
+                LOGGER.debug("Auto-paste enabled, performing paste (Shift+Insert only)")
+                # Avoid duplication in apps that handle both Shift+Insert and Ctrl+V
+                self._perform_paste(allow_ctrl_v=False)
                 self._tray.set_state(TrayState.PASTED)
 
             self._notify("Transcribed", f"{cleaned_text[:60]}...")
@@ -377,27 +379,35 @@ class AppRuntime:
     def _handle_request_paste(self) -> None:
         LOGGER.debug("Hotkey tapped within paste window: paste")
         self._tray.set_state(TrayState.PASTED)
-        self._perform_paste()
+        # Manual paste request: allow Ctrl+V fallback for broader app compatibility
+        self._perform_paste(allow_ctrl_v=True)
         self._schedule_idle_reset()
 
-    def _perform_paste(self) -> None:
-        """Simulate paste into the focused window (Windows: try Shift+Insert then Ctrl+V)."""
+    def _perform_paste(self, allow_ctrl_v: bool = True) -> None:
+        """Simulate paste into the focused window.
+
+        On Windows, use Shift+Insert; optionally fall back to Ctrl+V if allowed.
+        On other platforms, use Ctrl+V.
+        """
         try:
             # Small delay to ensure context switch
             import time, sys
             time.sleep(0.18)
 
             if sys.platform == "win32":
-                # Try Shift+Insert first
+                # Use Shift+Insert as the primary paste sequence
                 with self._keyboard_controller.pressed(Key.shift):
                     self._keyboard_controller.press(Key.insert)
                     self._keyboard_controller.release(Key.insert)
-                time.sleep(0.08)
-                # Fallback: Ctrl+V
-                with self._keyboard_controller.pressed(Key.ctrl):
-                    self._keyboard_controller.press("v")
-                    self._keyboard_controller.release("v")
-                LOGGER.info("Paste commands sent (Shift+Insert, Ctrl+V)")
+                if allow_ctrl_v:
+                    time.sleep(0.08)
+                    # Optional fallback: Ctrl+V
+                    with self._keyboard_controller.pressed(Key.ctrl):
+                        self._keyboard_controller.press("v")
+                        self._keyboard_controller.release("v")
+                    LOGGER.info("Paste commands sent (Shift+Insert, Ctrl+V)")
+                else:
+                    LOGGER.info("Paste command sent (Shift+Insert)")
             else:
                 with self._keyboard_controller.pressed(Key.ctrl):
                     self._keyboard_controller.press("v")
@@ -549,11 +559,54 @@ class AppRuntime:
 
 
 def configure_logging() -> None:
-    """Set up basic logging suitable for console and packaged builds."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
+    """Set up logging for console and a rolling log file.
+
+    - Console level can be overridden via PARAKEET_LOG_LEVEL (e.g., DEBUG/INFO).
+    - Detailed DEBUG logs are always written to %LOCALAPPDATA%/Parakeet/parakeet.log.
+    """
+    level_name = os.getenv("PARAKEET_LOG_LEVEL", "INFO").upper()
+    console_level = getattr(logging, level_name, logging.INFO)
+
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+    handlers: list[logging.Handler] = []
+
+    # Console handler
+    ch = logging.StreamHandler()
+    ch.setLevel(console_level)
+    ch.setFormatter(fmt)
+    handlers.append(ch)
+
+    # File handler (rolling)
+    try:
+        from logging.handlers import RotatingFileHandler
+        log_path = default_metrics_log_path().with_name("parakeet.log")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        fh = RotatingFileHandler(str(log_path), maxBytes=1_000_000, backupCount=2, encoding="utf-8")
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(fmt)
+        handlers.append(fh)
+    except Exception:
+        # If file logging fails, continue with console-only
+        pass
+
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    for h in handlers:
+        root.addHandler(h)
+
+
+def _configure_ssl_certs() -> None:
+    """Ensure HTTPS works in frozen builds by pointing to certifi CA bundle."""
+    try:
+        import certifi
+
+        os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+    except Exception:
+        # Best-effort; if certifi is unavailable, urllib/requests may still work
+        LOGGER.debug("SSL cert configuration skipped", exc_info=True)
 
 
 def show_error_dialog(message: str, title: str = "Parakeet") -> None:
@@ -578,6 +631,8 @@ def main() -> int:
             file=sys.stderr,
         )
     configure_logging()
+    # Configure SSL certificates early for any upcoming downloads
+    _configure_ssl_certs()
     settings = AppSettings.load()
 
     # Initialize performance metrics (opt-in via telemetry_enabled)

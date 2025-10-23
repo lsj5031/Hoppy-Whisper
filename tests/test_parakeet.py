@@ -87,7 +87,12 @@ def test_ensure_model_loaded_success(mock_onnx_asr) -> None:
     transcriber._ensure_model_loaded()
 
     assert transcriber._model is not None
-    mock_onnx_asr.load_model.assert_called_once_with(PARAKEET_MODEL_NAME)
+    mock_onnx_asr.load_model.assert_called_once()
+    args, kwargs = mock_onnx_asr.load_model.call_args
+    assert args[0] == PARAKEET_MODEL_NAME
+    # Providers may be passed as None; ensure keyword keys exist
+    assert "providers" in kwargs
+    assert "provider_options" in kwargs
 
 
 def test_ensure_model_loaded_only_once(mock_onnx_asr) -> None:
