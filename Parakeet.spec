@@ -151,19 +151,13 @@ datas = [
     (certifi.where(), 'certifi'),
 ]
 
-# Include onnx_asr preprocessors (e.g., nemo128.onnx) so the frozen app can read them
+# Fallback: include nemo128.onnx from Parakeet cache if present
 try:
-    import onnx_asr as _asr  # type: ignore
-    _asr_pkg_dir = Path(_asr.__file__).parent
-    _pp_dir = _asr_pkg_dir / 'preprocessors'
-    if _pp_dir.exists():
-        for _f in _pp_dir.rglob('*'):
-            if _f.is_file():
-                _rel = _f.relative_to(_asr_pkg_dir)
-                # Preserve package-relative directory structure under _internal
-                datas.append((str(_f), str(_rel.parent)))
+    cache_dir = Path(os.environ.get('LOCALAPPDATA', Path.home() / '.local' / 'share')) / 'Parakeet' / 'models'
+    nemo = cache_dir / 'nemo128.onnx'
+    if nemo.exists():
+        datas.append((str(nemo), 'onnx_asr/preprocessors'))
 except Exception:
-    # If onnx_asr isn't importable at spec-eval time, skip quietly
     pass
 
 a = Analysis(
@@ -172,7 +166,7 @@ a = Analysis(
     binaries=_ort_binaries + _msvc_binaries,
     datas=datas,
     hiddenimports=hidden,
-    hookspath=[],
+    hookspath=['.'],
     hooksconfig={},
     runtime_hooks=['pyi_rth_onnx_dlls.py'],
     excludes=['matplotlib', 'pandas', 'scipy', 'IPython', 'jupyter', 'notebook'],
