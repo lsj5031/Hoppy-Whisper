@@ -166,10 +166,9 @@ except Exception:
 try:
     cache_dir = Path(os.environ.get('LOCALAPPDATA', Path.home() / '.local' / 'share')) / 'Parakeet' / 'models'
     model_files = [
-        'encoder-model.onnx',
-        'decoder_joint-model.onnx',
+        'encoder-model.int8.onnx',
+        'decoder_joint-model.int8.onnx',
         'vocab.txt',
-        'encoder-model.onnx.data',
         'nemo128.onnx',
     ]
     for _fname in model_files:

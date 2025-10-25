@@ -40,33 +40,39 @@ class ModelManifest:
 
 DEFAULT_MANIFEST = ModelManifest(
     encoder=ModelAsset(
-        name="encoder-model.onnx",
-        url="https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/encoder-model.onnx",
-        sha256="",  # Will be validated after download if provided
+        name="encoder-model.int8.onnx",
+        url=(
+            "https://huggingface.co/istupakov/"
+            "parakeet-tdt-0.6b-v3-onnx/resolve/main/encoder-model.int8.onnx"
+        ),
+        sha256="",
         size_bytes=0,
     ),
     decoder=ModelAsset(
-        name="decoder_joint-model.onnx",
-        url="https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/decoder_joint-model.onnx",
+        name="decoder_joint-model.int8.onnx",
+        url=(
+            "https://huggingface.co/istupakov/"
+            "parakeet-tdt-0.6b-v3-onnx/resolve/main/decoder_joint-model.int8.onnx"
+        ),
         sha256="",
         size_bytes=0,
     ),
     vocab=ModelAsset(
         name="vocab.txt",
-        url="https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/vocab.txt",
+        url=(
+            "https://huggingface.co/istupakov/"
+            "parakeet-tdt-0.6b-v3-onnx/resolve/main/vocab.txt"
+        ),
         sha256="",
         size_bytes=0,
     ),
     extra_assets=(
         ModelAsset(
-            name="encoder-model.onnx.data",
-            url="https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/encoder-model.onnx.data",
-            sha256="",
-            size_bytes=0,
-        ),
-        ModelAsset(
             name="nemo128.onnx",
-            url="https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/nemo128.onnx",
+            url=(
+                "https://huggingface.co/istupakov/"
+                "parakeet-tdt-0.6b-v3-onnx/resolve/main/nemo128.onnx"
+            ),
             sha256="",
             size_bytes=0,
         ),
