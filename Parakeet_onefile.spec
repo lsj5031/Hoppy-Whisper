@@ -14,6 +14,8 @@ from PyInstaller.utils.hooks import collect_dynamic_libs
 
 SCRIPT = 'src/app/__main__.py'
 INCLUDE_DML = bool(os.environ.get('PARAKEET_INCLUDE_DML'))
+# Name SKU based on provider selection
+APP_NAME = 'Parakeet-DML' if INCLUDE_DML else 'Parakeet-CPU'
 
 # Collect ORT dynamic libraries and ensure capi/provider bits are present.
 _ort_binaries = []
@@ -201,7 +203,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='Parakeet-OneFile',
+    name=APP_NAME,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
