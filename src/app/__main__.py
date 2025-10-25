@@ -47,7 +47,6 @@ class AppRuntime:
         self._recording_active = False
         self._transcribe_timer: Optional[threading.Timer] = None
         self._idle_timer: Optional[threading.Timer] = None
-        self._bypass_cleanup = False
         self._app_name = "Parakeet"
         self._startup_command = startup.resolve_startup_command()
         # VAD state
@@ -57,7 +56,6 @@ class AppRuntime:
 
         self._audio_recorder = AudioRecorder()
         self._audio_buffer: Optional[np.ndarray] = None
-        self._bypass_cleanup = False
         self._cleanup_engine = self._create_cleanup_engine()
         self._keyboard_controller = Controller()
         self._history = HistoryDAO(
@@ -220,18 +218,10 @@ class AppRuntime:
             self._tray.set_state(TrayState.ERROR)
             self._schedule_idle_reset()
 
-    def _handle_record_stop(self, bypass_cleanup: bool = False) -> None:
+    def _handle_record_stop(self) -> None:
         if not self._recording_active:
             return
-        # Ignore Shift-bypass; cleanup is controlled by settings
-        self._bypass_cleanup = False
-        if bypass_cleanup and getattr(self._settings, "cleanup_enabled", True):
-            LOGGER.debug(
-                "Hotkey released with Shift: ignoring bypass; "
-                "using configured cleanup setting"
-            )
-        else:
-            LOGGER.debug("Hotkey released: stop recording")
+        LOGGER.debug("Hotkey released: stop recording")
         self._recording_active = False
 
         # Detach VAD processing and reset state
@@ -300,12 +290,8 @@ class AppRuntime:
                 result.text[:100],
             )
 
-            # Apply cleanup unless bypassed or globally disabled
-            if self._bypass_cleanup:
-                cleaned_text = result.text
-                cleanup_mode = "bypass"
-                LOGGER.info("Smart cleanup bypassed (Shift held)")
-            elif not getattr(self._settings, "cleanup_enabled", True):
+            # Apply cleanup according to settings only
+            if not getattr(self._settings, "cleanup_enabled", True):
                 cleaned_text = result.text
                 cleanup_mode = "disabled"
                 LOGGER.info("Smart cleanup disabled by setting")
@@ -320,7 +306,7 @@ class AppRuntime:
                     text=cleaned_text,
                     mode=cleanup_mode,
                     duration_ms=int(result.duration_ms),
-                    raw_text=result.text if not self._bypass_cleanup else None,
+                    raw_text=result.text,
                 )
                 LOGGER.debug("Utterance saved to history")
             except Exception as exc:
@@ -376,7 +362,6 @@ class AppRuntime:
                 )
 
             self._schedule_idle_reset()
-            self._bypass_cleanup = False  # Reset flag
 
         except Exception as exc:
             LOGGER.exception("Transcription failed", exc_info=exc)
@@ -462,7 +447,7 @@ class AppRuntime:
                     self._vad_stop_requested = True
                     # Stop recording on a separate thread to avoid blocking callback
                     threading.Thread(
-                        target=lambda: self._handle_record_stop(False),
+                        target=self._handle_record_stop,
                         daemon=True,
                     ).start()
                     break

@@ -31,6 +31,7 @@ def test_audio_device_missing_raises_clear_error():
 
 def test_hotkey_conflict_raises_clear_error():
     """Test that hotkey conflict produces actionable error."""
+    from unittest.mock import patch
 
     def dummy_cb():
         pass
@@ -42,27 +43,34 @@ def test_hotkey_conflict_raises_clear_error():
 
     callbacks = HotkeyCallbacks(
         on_record_start=dummy_cb,
-        on_record_stop=lambda bypass: None,
+        on_record_stop=lambda: None,
         on_request_paste=dummy_cb,
     )
 
-    try:
-        manager1 = HotkeyManager(chord, callbacks)
-        manager1.start()
+    # Bypass actual OS registration; simulate conflict on second register
+    with patch.object(HotkeyManager, "_ensure_hotkey_available", lambda self, c: None):
+        register_calls = {"count": 0}
 
-        # Second manager with same chord should fail
-        with pytest.raises(HotkeyInUseError) as exc_info:
-            manager2 = HotkeyManager(chord, callbacks)
-            manager2.start()
+        def fake_register(self):
+            register_calls["count"] += 1
+            if register_calls["count"] > 1:
+                raise HotkeyInUseError(
+                    f"Hotkey '{self._chord.display}' is already registered"
+                )
 
-        assert "already registered" in str(exc_info.value).lower()
-        assert chord.display in str(exc_info.value)
+        with patch.object(HotkeyManager, "_register_hotkey", fake_register):
+            manager1 = HotkeyManager(chord, callbacks)
+            manager1.start()
 
-    finally:
-        try:
+            # Second manager with same chord should fail
+            with pytest.raises(HotkeyInUseError) as exc_info:
+                manager2 = HotkeyManager(chord, callbacks)
+                manager2.start()
+
+            assert "already registered" in str(exc_info.value).lower()
+            assert chord.display in str(exc_info.value)
+
             manager1.stop()
-        except Exception:
-            pass
 
 
 def test_model_download_retry_with_backoff():

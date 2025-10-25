@@ -26,7 +26,7 @@ This document provides a comprehensive smoke test checklist for verifying the Pa
 
 - [ ] Double-click `Parakeet.exe`
 - [ ] Application launches and tray icon appears (should show idle state)
-- [ ] First-run notification appears explaining hotkey and Shift-to-bypass
+- [ ] First-run notification appears explaining the default hotkey
 - [ ] No console window appears (windowed mode)
 - [ ] No error dialogs
 
@@ -106,14 +106,7 @@ This document provides a comprehensive smoke test checklist for verifying the Pa
 - [ ] Verify clipboard contains: "This is a test" (fillers removed)
 - [ ] Verify proper capitalization
 
-#### 4b. Bypass Cleanup (Shift Key)
-
-- [ ] Hold `Shift` key
-- [ ] Press and hold `Ctrl+Shift+;`
-- [ ] Speak: "um so like this is you know a test"
-- [ ] Release hotkey (keep holding Shift)
-- [ ] Release Shift
-- [ ] Verify clipboard contains raw text: "um so like this is you know a test"
+<!-- Shift-to-bypass behavior has been removed; all transcriptions follow the configured cleanup setting. -->
 
 ---
 
@@ -261,7 +254,7 @@ All checklist items must pass for the build to be considered production-ready:
 - ✅ Application launches without errors on clean Windows 11 VM
 - ✅ Models download and cache correctly
 - ✅ Hotkey recording and paste workflow works end-to-end
-- ✅ Smart Cleanup and Shift-to-bypass function correctly
+- ✅ Smart Cleanup functions correctly (no Shift-bypass)
 - ✅ History and search work with FTS5 queries
 - ✅ Settings persist across restarts
 - ✅ Start with Windows toggle works correctly

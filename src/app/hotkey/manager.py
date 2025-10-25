@@ -31,7 +31,7 @@ class HotkeyCallbacks:
     """Callback hooks invoked by the hotkey manager."""
 
     on_record_start: Callable[[], None]
-    on_record_stop: Callable[[bool], None]  # bypass_cleanup flag
+    on_record_stop: Callable[[], None]
     on_request_paste: Callable[[], None]
     on_error: Callable[[Exception], None] = lambda exc: None
 
@@ -154,16 +154,10 @@ class HotkeyManager:
                     self._active = True
                     self._dispatch(self._callbacks.on_record_start)
                 else:
-                    # Toggle off on chord press; bypass cleanup disabled in toggle mode
+                    # Toggle off on chord press
                     self._active = False
                     self._last_release_time = 0.0
-                    # Check if Shift is currently held to optionally bypass cleanup
-                    bypass_cleanup = any(
-                        vk in self._pressed for vk in [0x10, 0xA0, 0xA1]
-                    )
-                    self._dispatch_with_bypass(
-                        self._callbacks.on_record_stop, bypass_cleanup
-                    )
+                    self._dispatch(self._callbacks.on_record_stop)
                 return
             # Hold/release mode
             if self._active:
@@ -195,10 +189,7 @@ class HotkeyManager:
                 return
             self._active = False
             self._last_release_time = time.monotonic()
-            # Check if Shift is still held
-            # (VK_SHIFT = 0x10, VK_LSHIFT = 0xA0, VK_RSHIFT = 0xA1)
-            bypass_cleanup = any(vk in self._pressed for vk in [0x10, 0xA0, 0xA1])
-            self._dispatch_with_bypass(self._callbacks.on_record_stop, bypass_cleanup)
+            self._dispatch(self._callbacks.on_record_stop)
 
     def _parse_and_validate(self, chord_input: str | HotkeyChord) -> HotkeyChord:
         chord = (
@@ -265,23 +256,6 @@ class HotkeyManager:
             except Exception:
                 pass
 
-    def _dispatch_with_bypass(
-        self, handler: Callable[[bool], None], bypass: bool
-    ) -> None:
-        try:
-            handler(bypass)
-        except Exception as exc:  # pragma: no cover - defensive
-            # Support handlers that take no parameters
-            if isinstance(exc, TypeError):
-                try:
-                    handler()  # type: ignore[misc]
-                    return
-                except Exception as exc2:  # fall back to error callback below
-                    exc = exc2
-            try:
-                self._callbacks.on_error(exc)
-            except Exception:
-                pass
 
 
 def _vk_from_key(key: keyboard.Key | keyboard.KeyCode) -> Optional[int]:

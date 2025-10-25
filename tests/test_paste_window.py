@@ -37,7 +37,7 @@ def test_paste_callback_is_registered():
 
     callbacks = HotkeyCallbacks(
         on_record_start=lambda: None,
-        on_record_stop=lambda bypass: None,
+        on_record_stop=lambda: None,
         on_request_paste=on_paste,
     )
 
@@ -64,6 +64,7 @@ def test_keyboard_controller_paste_simulation():
 def test_paste_window_timing():
     """Test that paste window timing is respected."""
     import time
+    from unittest.mock import patch
 
     from app.hotkey.manager import HotkeyCallbacks, HotkeyManager
 
@@ -73,16 +74,17 @@ def test_paste_window_timing():
 
     callbacks = HotkeyCallbacks(
         on_record_start=lambda: start_count.append(time.time()),
-        on_record_stop=lambda bypass: stop_count.append(time.time()),
+        on_record_stop=lambda: stop_count.append(time.time()),
         on_request_paste=lambda: paste_count.append(time.time()),
     )
 
-    # Create manager with 1 second paste window
-    manager = HotkeyManager(
-        "CTRL+SHIFT+;",
-        callbacks,
-        paste_window_seconds=1.0,
-    )
+    # Create manager with 1 second paste window (skip OS availability probe)
+    with patch.object(HotkeyManager, "_ensure_hotkey_available", lambda self, c: None):
+        manager = HotkeyManager(
+            "CTRL+SHIFT+;",
+            callbacks,
+            paste_window_seconds=1.0,
+        )
 
     assert manager.paste_window_seconds == 1.0
 

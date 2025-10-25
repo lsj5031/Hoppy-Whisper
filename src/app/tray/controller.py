@@ -38,7 +38,7 @@ class TrayController:
     FIRST_RUN_MESSAGE = (
         "Press Ctrl+Shift+; to start recording. "
         "Hold to capture speech, release to stop. "
-        "Hold Shift to bypass Smart Cleanup."
+        "Smart Cleanup can be toggled from the tray menu."
     )
 
     def __init__(

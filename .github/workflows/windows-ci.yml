@@ -78,24 +78,23 @@ jobs:
           Set-Content -Path prefetch_models.py -Value $code
           poetry run python prefetch_models.py
 
-      - name: Build PyInstaller (onefile)
+      - name: Build PyInstaller (CPU onefile)
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         run: |
+          Remove-Item Env:PARAKEET_INCLUDE_DML -ErrorAction SilentlyContinue
           poetry run pyinstaller --noconfirm --clean Parakeet_onefile.spec
 
-      - name: Verify build output
+      - name: Verify build output (CPU)
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         run: |
-          if (-not (Test-Path -Path "dist\Parakeet-OneFile.exe")) {
-            throw "Parakeet-OneFile.exe not found in dist directory"
-          }
+          if (-not (Test-Path -Path "dist\Parakeet-CPU.exe")) { throw "Parakeet-CPU.exe not found in dist directory" }
 
-      - name: Upload artifact
+      - name: Upload artifact (CPU)
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         uses: actions/upload-artifact@v4
         with:
-          name: parakeet-windows-onefile
-          path: dist/Parakeet-OneFile.exe
+          name: parakeet-windows-onefile-cpu
+          path: dist/Parakeet-CPU.exe
           if-no-files-found: error
 
   release:
@@ -104,14 +103,14 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - name: Download artifact
+      - name: Download artifact (CPU)
         uses: actions/download-artifact@v4
         with:
-          name: parakeet-windows-onefile
+          name: parakeet-windows-onefile-cpu
           path: release
 
-      - name: Publish GitHub Release
+      - name: Publish GitHub Release (CPU)
         uses: softprops/action-gh-release@v2
         with:
-          files: release/Parakeet-OneFile.exe
+          files: release/Parakeet-CPU.exe
           generate_release_notes: true

@@ -159,7 +159,6 @@ All data remains under your control on your device.
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+Shift+;` | **Record & Transcribe** (default hotkey)<br>- Press & hold to start recording<br>- Release to stop and transcribe<br>- Press again within 2s to paste |
-| `Shift` (hold during release) | **Bypass Smart Cleanup** - outputs raw transcription without cleanup |
 | `Win+Shift+Y` | **Open History Palette** - search and reuse past transcriptions |
 | `Enter` (in History) | Copy selected item to clipboard |
 | `Shift+Enter` (in History) | Copy and paste selected item |
