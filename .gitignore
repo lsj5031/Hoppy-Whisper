@@ -40,8 +40,6 @@ Thumbs.db
 
 # PyInstaller artifacts
 *.spec
-!Parakeet.spec
-!Parakeet_onefile.spec
 
 # CI/runtime artifacts (should not be tracked)
 /droid-output.txt

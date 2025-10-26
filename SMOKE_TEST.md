@@ -209,7 +209,7 @@ Test paste functionality in:
 **Expected:** Low CPU when idle, fast transcription on GPU.
 
 - [ ] Open Task Manager
-- [ ] Monitor Parakeet CPU usage when idle: **<1%**
+- [ ] Monitor Hoppy CPU usage when idle: **<1%**
 - [ ] Record a 5-7 second utterance
 - [ ] Note transcription time from release to clipboard:
   - **GPU (DirectML):** ≤600 ms

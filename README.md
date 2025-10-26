@@ -113,7 +113,7 @@ Settings are stored in `%LOCALAPPDATA%\Hoppy Whisper\settings.json` and can be e
 - `first_run_complete`: Internal flag for first-run notification
 
 **Environment Override:**
-Set `HOPPY_WHISPER_SETTINGS_PATH` (or legacy `PARAKEET_SETTINGS_PATH`) to use a custom settings file location.
+Set `HOPPY_WHISPER_SETTINGS_PATH` to use a custom settings file location.
 
 ## Privacy & Data
 
