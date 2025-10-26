@@ -50,7 +50,8 @@ class TrayIconFactory:
         self._icons_dir: Optional[Path] = _resolve_icons_dir()
         self._idle_icon: Optional[Path] = None
         self._listening_icon: Optional[Path] = None
-        self._transcribe_frames: List[Path] = []
+        self._listening_frames: List[Path] = []
+        self._transcribing_frames: List[Path] = []
 
         if self._icons_dir:
             self._idle_icon = _optional_file(self._icons_dir, "BunnyStandby.ico")
@@ -59,9 +60,10 @@ class TrayIconFactory:
                 _optional_file(self._icons_dir, "BunnyStandby.ico")
                 or _optional_file(self._icons_dir, "BunnyPause.ico")
             )
-            self._transcribe_frames = _transcribe_frame_files(self._icons_dir)
+            self._listening_frames = _listening_frame_files(self._icons_dir)
+            self._transcribing_frames = _transcribing_frame_files(self._icons_dir)
 
-        detected_frames = len(self._transcribe_frames)
+        detected_frames = max(len(self._listening_frames), len(self._transcribing_frames))
         if spinner_frames is not None:
             self._spinner_frames = spinner_frames
         else:
@@ -117,9 +119,16 @@ class TrayIconFactory:
         specific assets are missing to keep the tray responsive.
         """
         # Listening animation frames (animate while recording)
-        if self._icons_dir and key.state is TrayState.LISTENING and self._transcribe_frames:
-            idx = key.frame % len(self._transcribe_frames)
-            img = _open_ico_scaled(self._transcribe_frames[idx], key.size)
+        if self._icons_dir and key.state is TrayState.LISTENING and self._listening_frames:
+            idx = key.frame % len(self._listening_frames)
+            img = _open_ico_scaled(self._listening_frames[idx], key.size)
+            if img is not None:
+                return img
+
+        # Transcribing animation frames (animate while processing)
+        if self._icons_dir and key.state is TrayState.TRANSCRIBING and self._transcribing_frames:
+            idx = key.frame % len(self._transcribing_frames)
+            img = _open_ico_scaled(self._transcribing_frames[idx], key.size)
             if img is not None:
                 return img
 
@@ -129,6 +138,8 @@ class TrayIconFactory:
             if key.state in (TrayState.IDLE,):
                 candidate = self._idle_icon or self._listening_icon
             elif key.state in (TrayState.LISTENING, TrayState.COPIED, TrayState.PASTED):
+                candidate = self._idle_icon or self._listening_icon
+            elif key.state is TrayState.TRANSCRIBING:
                 candidate = self._idle_icon or self._listening_icon
             elif key.state is TrayState.ERROR:
                 candidate = _optional_file(self._icons_dir, "BunnyPause.ico") or self._idle_icon or self._listening_icon
@@ -181,8 +192,13 @@ def _optional_file(folder: Path, name: str) -> Optional[Path]:
     return path if path.exists() else None
 
 
-def _transcribe_frame_files(folder: Path) -> List[Path]:
-    files = sorted(folder.glob("BunnyTranscribe*.ico"), key=lambda p: _suffix_number(p.name))
+def _listening_frame_files(folder: Path) -> List[Path]:
+    files = sorted(folder.glob('BunnyListening*.ico'), key=lambda p: _suffix_number(p.name))
+    return [p for p in files if p.exists()]
+
+
+def _transcribing_frame_files(folder: Path) -> List[Path]:
+    files = sorted(folder.glob('BunnyTranscribing*.ico'), key=lambda p: _suffix_number(p.name))
     return [p for p in files if p.exists()]
 
 

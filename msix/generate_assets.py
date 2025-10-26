@@ -141,7 +141,7 @@ def main():
     ensure_directory(screenshots_dir)
     
     # Define source icon
-    source_icon = icos_dir / 'BunnyStandby.ico'
+    source_icon = icos_dir / 'BunnyPauseRounded.ico'
     
     # Define required MSIX package assets
     msix_assets = {

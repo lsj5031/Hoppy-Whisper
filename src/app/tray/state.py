@@ -18,4 +18,4 @@ class TrayState(str, Enum):
     @property
     def animated(self) -> bool:
         """Indicate whether this state expects an animated icon."""
-        return self is TrayState.LISTENING
+        return self in (TrayState.LISTENING, TrayState.TRANSCRIBING)
