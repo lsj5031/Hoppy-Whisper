@@ -1,4 +1,4 @@
-"""Tests for Parakeet transcriber."""
+"""Tests for Hoppy transcriber."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.transcriber.parakeet import (
-    PARAKEET_MODEL_NAME,
-    ParakeetTranscriber,
+from app.transcriber.hoppy import (
+    HOPPY_MODEL_REPO,
+    HoppyTranscriber,
     TranscriptionResult,
 )
 
@@ -45,7 +45,7 @@ def test_audio_file(tmp_path: Path) -> Path:
 
 def test_transcriber_init() -> None:
     """Test transcriber initialization."""
-    transcriber = ParakeetTranscriber()
+    transcriber = HoppyTranscriber()
     assert transcriber._model is None
     assert not transcriber._warmed_up
 
@@ -55,7 +55,7 @@ def test_transcriber_init_with_providers() -> None:
     providers = ["DmlExecutionProvider", "CPUExecutionProvider"]
     provider_options = [{"device_id": 0}, {}]
 
-    transcriber = ParakeetTranscriber(
+    transcriber = HoppyTranscriber(
         providers=providers, provider_options=provider_options
     )
 
@@ -72,7 +72,7 @@ def test_ensure_model_loaded_import_error() -> None:
 
     try:
         with patch.dict("sys.modules", {"onnx_asr": None}):
-            transcriber = ParakeetTranscriber()
+            transcriber = HoppyTranscriber()
 
             with pytest.raises(RuntimeError, match="onnx-asr not installed"):
                 transcriber._ensure_model_loaded()
@@ -83,13 +83,13 @@ def test_ensure_model_loaded_import_error() -> None:
 
 def test_ensure_model_loaded_success(mock_onnx_asr) -> None:
     """Test successful model loading."""
-    transcriber = ParakeetTranscriber()
+    transcriber = HoppyTranscriber()
     transcriber._ensure_model_loaded()
 
     assert transcriber._model is not None
     mock_onnx_asr.load_model.assert_called_once()
     args, kwargs = mock_onnx_asr.load_model.call_args
-    assert args[0] == PARAKEET_MODEL_NAME
+    assert args[0] == HOPPY_MODEL_REPO
     # Providers may be passed as None; ensure keyword keys exist
     assert "providers" in kwargs
     assert "provider_options" in kwargs
@@ -97,7 +97,7 @@ def test_ensure_model_loaded_success(mock_onnx_asr) -> None:
 
 def test_ensure_model_loaded_only_once(mock_onnx_asr) -> None:
     """Test model is only loaded once."""
-    transcriber = ParakeetTranscriber()
+    transcriber = HoppyTranscriber()
     transcriber._ensure_model_loaded()
     transcriber._ensure_model_loaded()
 
@@ -106,7 +106,7 @@ def test_ensure_model_loaded_only_once(mock_onnx_asr) -> None:
 
 def test_warmup(mock_onnx_asr) -> None:
     """Test model warmup."""
-    transcriber = ParakeetTranscriber()
+    transcriber = HoppyTranscriber()
     transcriber.warmup()
 
     assert transcriber._warmed_up
@@ -115,7 +115,7 @@ def test_warmup(mock_onnx_asr) -> None:
 
 def test_warmup_only_once(mock_onnx_asr) -> None:
     """Test warmup is only done once."""
-    transcriber = ParakeetTranscriber()
+    transcriber = HoppyTranscriber()
     transcriber.warmup()
     call_count_first = transcriber._model.recognize.call_count
 
@@ -127,7 +127,7 @@ def test_warmup_only_once(mock_onnx_asr) -> None:
 
 def test_transcribe_file_not_found(mock_onnx_asr) -> None:
     """Test transcribing non-existent file."""
-    transcriber = ParakeetTranscriber()
+    transcriber = HoppyTranscriber()
 
     with pytest.raises(FileNotFoundError, match="Audio file not found"):
         transcriber.transcribe_file("nonexistent.wav")
@@ -135,13 +135,13 @@ def test_transcribe_file_not_found(mock_onnx_asr) -> None:
 
 def test_transcribe_file_success(mock_onnx_asr, test_audio_file: Path) -> None:
     """Test successful file transcription."""
-    transcriber = ParakeetTranscriber()
+    transcriber = HoppyTranscriber()
     result = transcriber.transcribe_file(test_audio_file)
 
     assert isinstance(result, TranscriptionResult)
     assert result.text == "test transcription"
     assert result.duration_ms >= 0
-    assert result.model_name == PARAKEET_MODEL_NAME
+    assert result.model_name == HOPPY_MODEL_REPO
 
 
 def test_transcribe_file_model_error(mock_onnx_asr, test_audio_file: Path) -> None:
@@ -150,7 +150,7 @@ def test_transcribe_file_model_error(mock_onnx_asr, test_audio_file: Path) -> No
         "Model error"
     )
 
-    transcriber = ParakeetTranscriber()
+    transcriber = HoppyTranscriber()
 
     with pytest.raises(RuntimeError, match="Transcription failed"):
         transcriber.transcribe_file(test_audio_file)
@@ -160,7 +160,7 @@ def test_transcribe_buffer_success(mock_onnx_asr) -> None:
     """Test successful buffer transcription."""
     audio_data = b"\x00" * 32000  # 1 second of silence at 16kHz
 
-    transcriber = ParakeetTranscriber()
+    transcriber = HoppyTranscriber()
     result = transcriber.transcribe_buffer(audio_data)
 
     assert isinstance(result, TranscriptionResult)
@@ -172,7 +172,7 @@ def test_transcribe_buffer_custom_sample_rate(mock_onnx_asr) -> None:
     """Test buffer transcription with custom sample rate."""
     audio_data = b"\x00" * 48000  # 1 second at 48kHz
 
-    transcriber = ParakeetTranscriber()
+    transcriber = HoppyTranscriber()
     result = transcriber.transcribe_buffer(audio_data, sample_rate=48000)
 
     assert isinstance(result, TranscriptionResult)
@@ -181,7 +181,7 @@ def test_transcribe_buffer_custom_sample_rate(mock_onnx_asr) -> None:
 
 def test_get_transcriber_singleton() -> None:
     """Test singleton pattern for get_transcriber."""
-    from app.transcriber.parakeet import get_transcriber
+    from app.transcriber.hoppy import get_transcriber
 
     transcriber1 = get_transcriber()
     transcriber2 = get_transcriber()
@@ -191,15 +191,15 @@ def test_get_transcriber_singleton() -> None:
 
 def test_get_transcriber_with_providers() -> None:
     """Test get_transcriber with custom providers."""
-    from app.transcriber.parakeet import get_transcriber
+    from app.transcriber.hoppy import get_transcriber
 
     providers = ["DmlExecutionProvider"]
     provider_options = [{"device_id": 0}]
 
     # Reset singleton for this test
-    import app.transcriber.parakeet as parakeet_module
+    import app.transcriber.hoppy as hoppy_module
 
-    parakeet_module._transcriber = None
+    hoppy_module._transcriber = None
 
     transcriber = get_transcriber(
         providers=providers, provider_options=provider_options

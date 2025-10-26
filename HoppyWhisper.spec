@@ -3,7 +3,7 @@
 PyInstaller spec for Hoppy Whisper (Windows).
 
 This builds an onedir layout for easier inspection/debugging of bundled DLLs.
-Set HOPPY_WHISPER_INCLUDE_DML=1 (or legacy PARAKEET_INCLUDE_DML=1) to include DirectML provider binaries (when using
+Set HOPPY_WHISPER_INCLUDE_DML=1 to include DirectML provider binaries (when using
 onnxruntime-directml). By default, we bundle CPU-only ORT binaries.
 """
 
@@ -13,7 +13,7 @@ import certifi
 from PyInstaller.utils.hooks import collect_dynamic_libs
 
 SCRIPT = 'src/app/__main__.py'
-INCLUDE_DML = bool(os.environ.get('HOPPY_WHISPER_INCLUDE_DML') or os.environ.get('PARAKEET_INCLUDE_DML'))
+INCLUDE_DML = bool(os.environ.get('HOPPY_WHISPER_INCLUDE_DML'))
 
 # Collect ORT dynamic libraries and ensure capi/provider bits are present.
 _ort_binaries = []
@@ -216,6 +216,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
+    icon='icos/BunnyStandby.ico',
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

@@ -3,7 +3,7 @@
 PyInstaller spec for Hoppy Whisper (Windows) - ONEFILE variant.
 
 This builds a single-file executable for easier distribution.
-Set HOPPY_WHISPER_INCLUDE_DML=1 (or legacy PARAKEET_INCLUDE_DML=1) to include DirectML provider binaries (when using
+Set HOPPY_WHISPER_INCLUDE_DML=1 to include DirectML provider binaries (when using
 onnxruntime-directml). By default, we bundle CPU-only ORT binaries.
 """
 
@@ -13,7 +13,7 @@ import certifi
 from PyInstaller.utils.hooks import collect_dynamic_libs
 
 SCRIPT = 'src/app/__main__.py'
-INCLUDE_DML = bool(os.environ.get('HOPPY_WHISPER_INCLUDE_DML') or os.environ.get('PARAKEET_INCLUDE_DML'))
+INCLUDE_DML = bool(os.environ.get('HOPPY_WHISPER_INCLUDE_DML'))
 # Name SKU based on provider selection
 APP_NAME = 'Hoppy Whisper-DML' if INCLUDE_DML else 'Hoppy Whisper-CPU'
 
@@ -218,6 +218,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
+    icon='icos/BunnyStandby.ico',
     upx_exclude=['onnxruntime_pybind11_state.pyd', 'onnxruntime.dll', 'onnxruntime_providers_shared.dll'],
     console=False,
     disable_windowed_traceback=False,

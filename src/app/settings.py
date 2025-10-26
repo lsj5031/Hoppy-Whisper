@@ -66,8 +66,8 @@ class AppSettings:
 
 def default_settings_path() -> Path:
     """Resolve the path used to persist settings."""
-    # Prefer new env var, fall back to legacy for compatibility
-    override = os.getenv(SETTINGS_ENV_VAR) or os.getenv("PARAKEET_SETTINGS_PATH")
+    # Use explicit env var when provided
+    override = os.getenv(SETTINGS_ENV_VAR)
     if override:
         return Path(override)
     local_app_data = os.getenv("LOCALAPPDATA")

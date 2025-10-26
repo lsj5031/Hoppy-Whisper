@@ -31,7 +31,7 @@ from app.settings import (
     default_metrics_log_path,
     default_settings_path,
 )
-from app.transcriber import ParakeetTranscriber, load_transcriber
+from app.transcriber import HoppyTranscriber, load_transcriber
 from app.tray import TrayController, TrayMenuActions, TrayState
 
 LOGGER = logging.getLogger("hoppy_whisper")
@@ -40,7 +40,7 @@ LOGGER = logging.getLogger("hoppy_whisper")
 class AppRuntime:
     """High-level coordinator that wires the tray and hotkey subsystems."""
 
-    def __init__(self, settings: AppSettings, transcriber: ParakeetTranscriber) -> None:
+    def __init__(self, settings: AppSettings, transcriber: HoppyTranscriber) -> None:
         self._settings = settings
         self._transcriber = transcriber
         self._stop_event = threading.Event()
@@ -560,7 +560,7 @@ def configure_logging() -> None:
     - Console level can be overridden via HOPPY_WHISPER_LOG_LEVEL (e.g., DEBUG/INFO).
     - Detailed DEBUG logs are always written to %LOCALAPPDATA%/Hoppy Whisper/hoppy_whisper.log.
     """
-    level_name = os.getenv("HOPPY_WHISPER_LOG_LEVEL", os.getenv("PARAKEET_LOG_LEVEL", "INFO")).upper()
+    level_name = os.getenv("HOPPY_WHISPER_LOG_LEVEL", "INFO").upper()
     console_level = getattr(logging, level_name, logging.INFO)
 
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")

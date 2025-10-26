@@ -85,8 +85,8 @@ def test_animated_states_have_multiple_frames():
     """Test that animated states generate multiple frames."""
     factory = TrayIconFactory()
 
-    # Transcribing state is animated
-    frames = factory.state_frames(TrayState.TRANSCRIBING, TrayTheme.LIGHT)
+    # Listening state is animated
+    frames = factory.state_frames(TrayState.LISTENING, TrayTheme.LIGHT)
 
     # Should have frames for each size
     assert 32 in frames

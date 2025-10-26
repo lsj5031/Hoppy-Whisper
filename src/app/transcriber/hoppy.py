@@ -13,7 +13,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-PARAKEET_MODEL_NAME = "nemo-parakeet-tdt-0.6b-v3"
+HOPPY_MODEL_REPO = "nemo-parakeet-tdt-0.6b-v3"
 
 
 @dataclass
@@ -25,7 +25,7 @@ class TranscriptionResult:
     model_name: str
 
 
-class ParakeetTranscriber:
+class HoppyTranscriber:
     """ONNX transcriber with optional DirectML support."""
 
     def __init__(
@@ -96,9 +96,9 @@ class ParakeetTranscriber:
                 return _OriginalIS(*args, **kwargs)
 
             # Only patch once per process
-            if not getattr(ort, "_parakeet_patched", False):
+            if not getattr(ort, "_hoppy_patched", False):
                 ort.InferenceSession = _PatchedInferenceSession  # type: ignore[assignment]
-                ort._parakeet_patched = True
+                ort._hoppy_patched = True
         except Exception:
             # If ORT isn't available yet or patch fails, continue without it.
             pass
@@ -154,7 +154,7 @@ class ParakeetTranscriber:
                 try:
                     logger.info(f"Loading model locally from: {local_model_dir}")
                     self._model = onnx_asr.load_model(
-                        PARAKEET_MODEL_NAME,
+                        HOPPY_MODEL_REPO,
                         model_dir=str(local_model_dir),
                         providers=self._providers,
                         provider_options=self._provider_options,
@@ -163,21 +163,21 @@ class ParakeetTranscriber:
                     # Fallbacks for older signatures
                     try:
                         self._model = onnx_asr.load_model(
-                            PARAKEET_MODEL_NAME,
+                            HOPPY_MODEL_REPO,
                             model_dir=str(local_model_dir),
                         )
                     except TypeError:
-                        self._model = onnx_asr.load_model(PARAKEET_MODEL_NAME)
+                        self._model = onnx_asr.load_model(HOPPY_MODEL_REPO)
             else:
                 # Non-frozen or no local bundle: use repo name, allow download/cache
                 try:
                     self._model = onnx_asr.load_model(
-                        PARAKEET_MODEL_NAME,
+                        HOPPY_MODEL_REPO,
                         providers=self._providers,
                         provider_options=self._provider_options,
                     )
                 except TypeError:
-                    self._model = onnx_asr.load_model(PARAKEET_MODEL_NAME)
+                    self._model = onnx_asr.load_model(HOPPY_MODEL_REPO)
         except Exception as e:
             if isinstance(e, ModuleNotFoundError) and e.name == "huggingface_hub":
                 friendly = (
@@ -291,7 +291,7 @@ class ParakeetTranscriber:
             return TranscriptionResult(
                 text=text,
                 duration_ms=duration_ms,
-                model_name=PARAKEET_MODEL_NAME,
+                model_name=HOPPY_MODEL_REPO,
             )
 
         except Exception as e:
@@ -337,13 +337,13 @@ class ParakeetTranscriber:
                 os.unlink(temp_path)
 
 
-_transcriber: ParakeetTranscriber | None = None
+_transcriber: HoppyTranscriber | None = None
 
 
 def get_transcriber(
     providers: list[str] | None = None,
     provider_options: list[dict[str, Any]] | None = None,
-) -> ParakeetTranscriber:
+) -> HoppyTranscriber:
     """Get or create the global transcriber singleton.
 
     Args:
@@ -355,7 +355,7 @@ def get_transcriber(
     """
     global _transcriber
     if _transcriber is None:
-        _transcriber = ParakeetTranscriber(
+        _transcriber = HoppyTranscriber(
             providers=providers,
             provider_options=provider_options,
         )

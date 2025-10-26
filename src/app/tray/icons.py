@@ -116,8 +116,8 @@ class TrayIconFactory:
         Uses ICO assets only; falls back to a transparent placeholder when
         specific assets are missing to keep the tray responsive.
         """
-        # Transcribing animation frames
-        if self._icons_dir and key.state is TrayState.TRANSCRIBING and self._transcribe_frames:
+        # Listening animation frames (animate while recording)
+        if self._icons_dir and key.state is TrayState.LISTENING and self._transcribe_frames:
             idx = key.frame % len(self._transcribe_frames)
             img = _open_ico_scaled(self._transcribe_frames[idx], key.size)
             if img is not None:
@@ -126,9 +126,9 @@ class TrayIconFactory:
         # Static states: map to available assets
         candidate: Optional[Path] = None
         if self._icons_dir:
-            if key.state in (TrayState.IDLE, TrayState.LISTENING):
+            if key.state in (TrayState.IDLE,):
                 candidate = self._idle_icon or self._listening_icon
-            elif key.state in (TrayState.COPIED, TrayState.PASTED):
+            elif key.state in (TrayState.LISTENING, TrayState.COPIED, TrayState.PASTED):
                 candidate = self._idle_icon or self._listening_icon
             elif key.state is TrayState.ERROR:
                 candidate = _optional_file(self._icons_dir, "BunnyPause.ico") or self._idle_icon or self._listening_icon
@@ -149,14 +149,14 @@ def _resolve_icons_dir() -> Optional[Path]:
     """Locate the icos directory with bunny assets if present.
 
     Order:
-    1) HOPPY_WHISPER_ICONS_DIR env var (legacy alternate also supported)
+    1) HOPPY_WHISPER_ICONS_DIR env var
     2) PyInstaller bundle dir (sys._MEIPASS)/icos
     3) Search upward from this file for a folder named "icos" containing BunnyStandby.ico
     """
     import os
     import sys
 
-    env_dir = os.getenv("HOPPY_WHISPER_ICONS_DIR") or os.getenv("PARAKEET_ICONS_DIR")
+    env_dir = os.getenv("HOPPY_WHISPER_ICONS_DIR")
     if env_dir:
         p = Path(env_dir)
         if p.is_dir():

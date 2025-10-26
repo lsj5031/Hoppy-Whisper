@@ -123,9 +123,9 @@ def test_transcription_error_produces_actionable_message():
     """Test that transcription errors are clear and actionable."""
     from pathlib import Path
 
-    from app.transcriber import ParakeetTranscriber
+    from app.transcriber import HoppyTranscriber
 
-    transcriber = ParakeetTranscriber()
+    transcriber = HoppyTranscriber()
 
     # Try to transcribe non-existent file
     with pytest.raises(FileNotFoundError) as exc_info:

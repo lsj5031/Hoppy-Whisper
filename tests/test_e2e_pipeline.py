@@ -7,17 +7,16 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from app.transcriber.parakeet import PARAKEET_MODEL_NAME, TranscriptionResult
+from app.transcriber.hoppy import HOPPY_MODEL_REPO, TranscriptionResult
 
 
 @pytest.fixture
 def mock_transcriber():
-    """Mock the ParakeetTranscriber."""
     transcriber = MagicMock()
     transcriber.transcribe_file.return_value = TranscriptionResult(
         text="This is a test transcription.",
         duration_ms=150.0,
-        model_name=PARAKEET_MODEL_NAME,
+        model_name=HOPPY_MODEL_REPO,
     )
     return transcriber
 
@@ -59,7 +58,7 @@ def test_clipboard_copy():
     assert clipboard_content == test_text
 
 
-@patch("app.transcriber.parakeet.get_transcriber")
+@patch("app.transcriber.hoppy.get_transcriber")
 def test_load_transcriber_success(mock_get_transcriber):
     """Test loading the transcriber."""
     from app.transcriber import load_transcriber

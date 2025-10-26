@@ -1,8 +1,8 @@
 [project]
-name = "parakeet"
+name = "hoppy-whisper"
 version = "0.1.0"
 description = "Windows tray transcription tray app foundation"
-authors = [{ name = "Parakeet Contributors", email = "maintainers@parakeet.app" }]
+authors = [{ name = "hoppy whisper Contributors", email = "maintainers@hoppy.app" }]
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11,<4.0"
