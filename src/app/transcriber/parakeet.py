@@ -1,4 +1,4 @@
-"""Parakeet ONNX transcriber implementation."""
+"""ONNX transcriber implementation for Hoppy Whisper."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class TranscriptionResult:
 
 
 class ParakeetTranscriber:
-    """Parakeet ONNX transcriber with DirectML support."""
+    """ONNX transcriber with optional DirectML support."""
 
     def __init__(
         self,
@@ -34,7 +34,7 @@ class ParakeetTranscriber:
         providers: list[str] | None = None,
         provider_options: list[dict[str, Any]] | None = None,
     ) -> None:
-        """Initialize the Parakeet transcriber.
+        """Initialize the transcriber.
 
         Args:
             model_path: Path to model directory (encoder/decoder/vocab).
@@ -55,7 +55,7 @@ class ParakeetTranscriber:
         # Initialize detected provider based on environment capability
         self._update_provider_detection()
 
-        logger.info("Parakeet transcriber initialized")
+        logger.info("Transcriber initialized")
 
     def _ensure_model_loaded(self) -> None:
         """Ensure the model is loaded and ready."""
@@ -115,7 +115,7 @@ class ParakeetTranscriber:
                 "onnx-asr not installed. Please install it to use transcription."
             ) from e
 
-        logger.info("Loading Parakeet TDT 0.6b model...")
+        logger.info("Loading TDT 0.6b model...")
         start_time = time.time()
 
         # Record requested providers for metrics/debugging
@@ -186,8 +186,8 @@ class ParakeetTranscriber:
                 )
             else:
                 friendly = str(e)
-            logger.error(f"Failed to load Parakeet model: {friendly}")
-            raise RuntimeError(f"Failed to load Parakeet model: {friendly}") from e
+            logger.error(f"Failed to load model: {friendly}")
+            raise RuntimeError(f"Failed to load model: {friendly}") from e
 
         load_time = (time.time() - start_time) * 1000
         logger.info(f"Model loaded in {load_time:.0f} ms")
@@ -351,7 +351,7 @@ def get_transcriber(
         provider_options: Provider options (only used on first call)
 
     Returns:
-        The global ParakeetTranscriber instance
+        The global transcriber instance
     """
     global _transcriber
     if _transcriber is None:

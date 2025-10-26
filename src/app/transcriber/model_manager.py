@@ -92,14 +92,14 @@ class ModelManager:
 
         Args:
             cache_dir: Directory for cached models. Defaults to
-                %LOCALAPPDATA%/Parakeet/models
-            manifest: Model manifest. Defaults to Parakeet TDT 0.6b v2
+                %LOCALAPPDATA%/Hoppy Whisper/models
+            manifest: Model manifest. Defaults to TDT 0.6b
         """
         if cache_dir is None:
             import os
 
             app_data = Path(os.environ.get("LOCALAPPDATA", "~/.local/share"))
-            cache_dir = app_data / "Parakeet" / "models"
+            cache_dir = app_data / "Hoppy Whisper" / "models"
 
         self.cache_dir = cache_dir.expanduser().resolve()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -239,7 +239,7 @@ class ModelManager:
     ) -> None:
         """Download a file with optional progress tracking."""
         request = urllib.request.Request(asset.url)
-        request.add_header("User-Agent", "Parakeet/0.1.0")
+        request.add_header("User-Agent", "HoppyWhisper/0.1.0")
 
         with urlopen(request, timeout=30) as response:
             total_size = int(response.headers.get("Content-Length", 0))

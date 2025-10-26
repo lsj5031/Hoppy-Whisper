@@ -34,7 +34,7 @@ class TrayMenuActions:
 class TrayController:
     """Manage the tray icon lifecycle, menu, and state transitions."""
 
-    FIRST_RUN_TITLE = "Parakeet"
+    FIRST_RUN_TITLE = "Hoppy Whisper"
     FIRST_RUN_MESSAGE = (
         "Press Ctrl+Shift+; to start recording. "
         "Hold to capture speech, release to stop. "
@@ -147,7 +147,7 @@ class TrayController:
         self._spinner_thread = None
 
     def _spin(self) -> None:
-        interval = 0.08
+        interval = 0.15
         while not self._spinner_stop.wait(interval):
             self._current_frame = (
                 self._current_frame + 1

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
 
-LOGGER = logging.getLogger("parakeet.metrics")
+LOGGER = logging.getLogger("hoppy_whisper.metrics")
 
 # Performance budget thresholds (ms)
 STARTUP_BUDGET_MS = 300

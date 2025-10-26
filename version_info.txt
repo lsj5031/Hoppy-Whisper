@@ -15,13 +15,13 @@ VSVersionInfo(
         StringTable(
           u'040904B0',
           [
-            StringStruct(u'CompanyName', u'Parakeet'),
-            StringStruct(u'FileDescription', u'Parakeet Tray Application'),
+            StringStruct(u'CompanyName', u'Hoppy Whisper'),
+            StringStruct(u'FileDescription', u'Hoppy Whisper Tray Application'),
             StringStruct(u'FileVersion', u'0.1.0'),
-            StringStruct(u'InternalName', u'Parakeet'),
-            StringStruct(u'LegalCopyright', u'Copyright (c) Parakeet Contributors'),
-            StringStruct(u'OriginalFilename', u'Parakeet.exe'),
-            StringStruct(u'ProductName', u'Parakeet'),
+            StringStruct(u'InternalName', u'Hoppy Whisper'),
+            StringStruct(u'LegalCopyright', u'Copyright (c) Hoppy Whisper Contributors'),
+            StringStruct(u'OriginalFilename', u'Hoppy Whisper.exe'),
+            StringStruct(u'ProductName', u'Hoppy Whisper'),
             StringStruct(u'ProductVersion', u'0.1.0'),
           ]
         )

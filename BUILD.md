@@ -1,6 +1,6 @@
-# Building Parakeet
+# Building Hoppy Whisper
 
-This guide covers building the Parakeet executable locally for development and testing.
+This guide covers building the Hoppy Whisper executable locally for development and testing.
 
 ## Prerequisites
 
@@ -18,16 +18,16 @@ To build the executable locally:
 poetry install --with dev
 
 # Build with PyInstaller
-poetry run pyinstaller --noconfirm --clean Parakeet.spec
+poetry run pyinstaller --noconfirm --clean HoppyWhisper.spec
 ```
 
-The output will be in `dist/Parakeet.exe`.
+The output will be in `dist/Hoppy Whisper.exe`.
 
 ## Build Configuration
 
 ### PyInstaller Spec File
 
-The build is configured in `Parakeet.spec`:
+The build is configured in `HoppyWhisper.spec`:
 
 - **Entry point:** `src/app/__main__.py`
 - **Mode:** Single-file executable (`--onefile` equivalent)
@@ -40,7 +40,7 @@ The build is configured in `Parakeet.spec`:
 
 To enable console mode for debugging:
 
-1. Edit `Parakeet.spec`
+1. Edit `HoppyWhisper.spec`
 2. Change `console_mode = False` to `console_mode = True`
 3. Rebuild
 
@@ -52,12 +52,12 @@ Console mode will show stdout/stderr in a terminal window, useful for debugging.
 
 1. **Build the executable:**
    ```powershell
-   poetry run pyinstaller --noconfirm --clean Parakeet.spec
+   poetry run pyinstaller --noconfirm --clean HoppyWhisper.spec
    ```
 
 2. **Run from dist directory:**
    ```powershell
-   .\dist\Parakeet.exe
+   .\dist\Hoppy Whisper.exe
    ```
 
 3. **Test basic functionality:**
@@ -70,7 +70,7 @@ Console mode will show stdout/stderr in a terminal window, useful for debugging.
 4. **Check logs:**
    - Console output (if console mode enabled)
    - Windows Event Viewer for crashes
-   - `%LOCALAPPDATA%\Parakeet\` for settings/history
+   - `%LOCALAPPDATA%\Hoppy Whisper\` for settings/history
 
 ### Clean VM Testing
 
@@ -82,7 +82,7 @@ For production releases, test on a clean Windows VM:
    - Enable microphone (or virtual audio device)
 
 2. **Copy executable:**
-   - Transfer `dist/Parakeet.exe` to VM
+   - Transfer `dist/Hoppy Whisper.exe` to VM
    - No other files needed (self-contained)
 
 3. **Run smoke tests:**
@@ -134,7 +134,7 @@ The executable runs but crashes with "No module named X":
 
 3. **Rebuild:**
    ```powershell
-   poetry run pyinstaller --noconfirm --clean Parakeet.spec
+   poetry run pyinstaller --noconfirm --clean HoppyWhisper.spec
    ```
 
 ### "DLL not found" at runtime
@@ -177,8 +177,8 @@ PyInstaller fails during build:
 
 1. **Clear build cache:**
    ```powershell
-   Remove-Item -Recurse -Force build, dist
-   poetry run pyinstaller --noconfirm --clean Parakeet.spec
+Remove-Item -Recurse -Force build, dist
+poetry run pyinstaller --noconfirm --clean HoppyWhisper.spec
    ```
 
 2. **Check Poetry environment:**
@@ -209,7 +209,7 @@ GitHub Actions will:
 - Run tests (pytest, ruff)
 - Build with PyInstaller
 - Create GitHub Release
-- Upload `Parakeet-windows-x86_64.zip`
+- Upload `Hoppy Whisper-CPU.exe`
 
 ## Advanced Configuration
 
@@ -218,10 +218,10 @@ GitHub Actions will:
 To add a static application icon:
 
 1. Create/obtain a `.ico` file (multi-resolution recommended)
-2. Place in root directory as `parakeet.ico`
-3. Uncomment in `Parakeet.spec`:
+2. Place in root directory as `hoppy_whisper.ico`
+3. Uncomment in `HoppyWhisper.spec`:
    ```python
-   icon='parakeet.ico',
+   icon='hoppy_whisper.ico',
    ```
 
 Note: Icons are currently generated dynamically by the app, so this is optional.
@@ -253,12 +253,12 @@ For distribution via Microsoft Store or enterprise:
 1. Obtain code signing certificate
 2. Sign the executable:
    ```powershell
-   signtool sign /f certificate.pfx /p password /tr http://timestamp.digicert.com /td sha256 /fd sha256 dist\Parakeet.exe
+   signtool sign /f certificate.pfx /p password /tr http://timestamp.digicert.com /td sha256 /fd sha256 "dist\Hoppy Whisper.exe"
    ```
 
 3. Verify signature:
    ```powershell
-   signtool verify /pa dist\Parakeet.exe
+   signtool verify /pa "dist\Hoppy Whisper.exe"
    ```
 
 ## Further Reading

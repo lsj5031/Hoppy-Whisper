@@ -1,4 +1,4 @@
-"""Global hotkey manager for the Parakeet tray app."""
+"""Global hotkey manager for the Hoppy Whisper tray app."""
 
 from __future__ import annotations
 

@@ -156,24 +156,24 @@ def test_startup_enable_disable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(startup, "winreg", fake_winreg, raising=True)
 
     command = '"python" -m app'
-    startup.enable_startup("Parakeet", command)
-    assert fake_winreg.storage[startup.RUN_KEY_PATH]["Parakeet"] == command
-    assert startup.is_startup_enabled("Parakeet", command) is True
+    startup.enable_startup("Hoppy Whisper", command)
+    assert fake_winreg.storage[startup.RUN_KEY_PATH]["Hoppy Whisper"] == command
+    assert startup.is_startup_enabled("Hoppy Whisper", command) is True
 
-    startup.disable_startup("Parakeet")
-    assert "Parakeet" not in fake_winreg.storage.get(startup.RUN_KEY_PATH, {})
-    assert startup.is_startup_enabled("Parakeet", command) is False
+    startup.disable_startup("Hoppy Whisper")
+    assert "Hoppy Whisper" not in fake_winreg.storage.get(startup.RUN_KEY_PATH, {})
+    assert startup.is_startup_enabled("Hoppy Whisper", command) is False
 
 
 def test_resolve_startup_command_handles_frozen(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        startup.sys, "executable", r"C:\App\Parakeet.exe", raising=False
+        startup.sys, "executable", r"C:\App\Hoppy Whisper.exe", raising=False
     )
     monkeypatch.setattr(startup.sys, "frozen", True, raising=False)
     cmd = startup.resolve_startup_command()
-    assert cmd == '"C:\\App\\Parakeet.exe"'
+    assert cmd == '"C:\\App\\Hoppy Whisper.exe"'
 
     monkeypatch.setattr(startup.sys, "frozen", False, raising=False)
     cmd_dev = startup.resolve_startup_command()

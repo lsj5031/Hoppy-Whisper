@@ -1,6 +1,6 @@
-# Parakeet Tray App Foundation
+# Hoppy Whisper Tray App Foundation
 
-Parakeet is a Windows-native tray application for fast transcription and clipboard automation. This repository currently provides the scaffolding for future development, including a Poetry-managed environment and a modular `src/app` package layout covering tray integration, hotkey handling, audio capture, speech transcription, smart cleanup, and history persistence.
+Hoppy Whisper is a Windows-native tray application for fast transcription and clipboard automation. This repository currently provides the scaffolding for future development, including a Poetry-managed environment and a modular `src/app` package layout covering tray integration, hotkey handling, audio capture, speech transcription, smart cleanup, and history persistence.
 
 ## Quick start
 
@@ -24,18 +24,18 @@ Parakeet is a Windows-native tray application for fast transcription and clipboa
 ### For End Users
 
 1. **Download the latest release:**
-   - Go to [Releases](https://github.com/YOUR_USERNAME/Parakeet/releases/latest)
-   - Download `Parakeet-windows-x86_64.zip`
+   - Go to [Releases](https://github.com/YOUR_USERNAME/Hoppy-Whisper/releases/latest)
+   - Download `Hoppy Whisper-CPU.exe`
 
 2. **Extract and run:**
-   - Extract the zip file to a folder of your choice
-   - Double-click `Parakeet.exe` to launch
+   - Place the executable in a folder of your choice
+   - Double-click `Hoppy Whisper-CPU.exe` to launch
    - The app will appear in your system tray
 
 3. **First-run setup:**
    - A notification will explain the default hotkey (`Ctrl+Shift+;`)
    - On first transcription, models (~500MB) will download automatically from Hugging Face
-   - Models are cached locally in `%LOCALAPPDATA%\Parakeet\models\`
+   - Models are cached locally in `%LOCALAPPDATA%\Hoppy Whisper\models\`
 
 **System Requirements:**
 - Windows 10 (64-bit) or Windows 11
@@ -53,8 +53,8 @@ See [Development Setup](#quick-start) below.
 ## CI and Releases
 
 - **Windows CI** runs on pull requests targeting `main`, pushes to `main`, and tags matching `v*`
-- The workflow installs Poetry, runs Ruff linting, executes pytest, and builds a single-file PyInstaller executable using `Parakeet.spec`
-- The executable is zipped as `Parakeet-windows-x86_64.zip` and uploaded as a workflow artifact
+- The workflow installs Poetry, runs Ruff linting, executes pytest, and builds a single-file PyInstaller executable
+- The release attaches `Hoppy Whisper-CPU.exe` as an artifact
 - **Tag pushes** that match `v*` automatically create a GitHub Release with the zip attached and auto-generated release notes
 
 ### Creating a Release
@@ -78,7 +78,7 @@ To publish a new release:
    - Build the PyInstaller executable
    - Run all tests
    - Create a GitHub Release
-   - Attach `Parakeet-windows-x86_64.zip`
+   - Attach `Hoppy Whisper-CPU.exe`
 
 4. **Smoke test** the release build on a clean Windows VM using [SMOKE_TEST.md](SMOKE_TEST.md)
 
@@ -94,7 +94,7 @@ The default hotkey is <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>;</kbd>:
 
 ### Configuration
 
-Settings are stored in `%LOCALAPPDATA%\Parakeet\settings.json` and can be edited manually or via the tray menu (Settings → opens file location).
+Settings are stored in `%LOCALAPPDATA%\Hoppy Whisper\settings.json` and can be edited manually or via the tray menu (Settings → opens file location).
 
 **Available Settings:**
 
@@ -113,11 +113,11 @@ Settings are stored in `%LOCALAPPDATA%\Parakeet\settings.json` and can be edited
 - `first_run_complete`: Internal flag for first-run notification
 
 **Environment Override:**
-Set `PARAKEET_SETTINGS_PATH` to use a custom settings file location.
+Set `HOPPY_WHISPER_SETTINGS_PATH` (or legacy `PARAKEET_SETTINGS_PATH`) to use a custom settings file location.
 
 ## Privacy & Data
 
-**Parakeet processes all audio and transcription data on your local device:**
+**Hoppy Whisper processes all audio and transcription data on your local device:**
 
 - **No cloud services**: Audio capture, speech recognition, and text processing happen entirely on your machine using local ONNX Runtime models.
 - **No telemetry**: The application does not collect, transmit, or share usage data, analytics, or personal information.
@@ -125,7 +125,7 @@ Set `PARAKEET_SETTINGS_PATH` to use a custom settings file location.
 
 ## Error Handling & Recovery
 
-Parakeet is designed to handle errors gracefully:
+Hoppy Whisper is designed to handle errors gracefully:
 
 - **Microphone missing or disconnected**: Shows clear notification with instructions to connect a microphone
 - **Hotkey conflicts**: Displays specific error if the chosen hotkey is already registered by another application
@@ -137,14 +137,14 @@ Parakeet is designed to handle errors gracefully:
 
 ## Accessibility Features
 
-Parakeet is designed to be accessible:
+Hoppy Whisper is designed to be accessible:
 
 - **High-contrast icons**: Automatically switches to high-contrast icon variants when Windows high-contrast mode is enabled
 - **Theme awareness**: Respects system light/dark theme preferences for icon appearance
 - **Keyboard navigation**: All tray menu items are keyboard-accessible (navigate with arrow keys, activate with Enter)
 - **Screen reader friendly**: Menu items have descriptive labels for assistive technologies
 - **Multiple icon sizes**: Supports various DPI scaling levels (16px to 64px)
-- **Local storage**: Transcription history is stored in a local SQLite database at `%LOCALAPPDATA%\Parakeet\history.db` with a default 90-day retention period.
+- **Local storage**: Transcription history is stored in a local SQLite database at `%LOCALAPPDATA%\Hoppy Whisper\history.db` with a default 90-day retention period.
 - **Export & deletion**: You can export your history to `.txt` or `.json` files via the History palette, or clear all stored utterances at any time with a confirmation dialog.
 
 **Required permissions:**
@@ -168,7 +168,7 @@ All data remains under your control on your device.
 
 ## Known Limitations
 
-- **Windows only:** Parakeet is optimized for Windows 10/11 and uses Windows-specific APIs (WASAPI, winreg, pystray). It will not run on macOS or Linux without significant modifications.
+- **Windows only:** Hoppy Whisper is optimized for Windows 10/11 and uses Windows-specific APIs (WASAPI, winreg, pystray). It will not run on macOS or Linux without significant modifications.
 
 - **English only (v1):** The current model supports English transcription. Multilingual models may be added in future releases.
 
@@ -176,7 +176,7 @@ All data remains under your control on your device.
 
 - **GPU compatibility:** DirectML acceleration requires a DirectX 12 compatible GPU. The app will fall back to CPU if no compatible GPU is detected (slower but functional).
 
-- **Hotkey conflicts:** If another application has already registered the chosen hotkey, Parakeet will fail to start with an error. You must resolve the conflict by changing either app's hotkey.
+- **Hotkey conflicts:** If another application has already registered the chosen hotkey, Hoppy Whisper will fail to start with an error. You must resolve the conflict by changing either app's hotkey.
 
 - **Background noise:** Very noisy environments may affect transcription quality. The WebRTC VAD gate helps filter background noise but is not perfect.
 
@@ -188,7 +188,7 @@ All data remains under your control on your device.
 
 ## Troubleshooting
 
-- **"Hotkey already in use"** - Another application is using the same hotkey. Change Parakeet's hotkey in settings or disable the conflicting app's hotkey.
+- **"Hotkey already in use"** - Another application is using the same hotkey. Change Hoppy Whisper's hotkey in settings or disable the conflicting app's hotkey.
 
 - **"Microphone Error: No audio input device"** - Ensure a microphone is connected and enabled in Windows Sound settings. Check Privacy settings to allow microphone access.
 
@@ -198,7 +198,7 @@ All data remains under your control on your device.
 
 - **"Recording Too Short"** - Hold the hotkey for at least 0.2 seconds. Very brief presses are ignored to prevent accidental triggers.
 
-- **Paste doesn't work in some apps** - Some applications (e.g., elevated/admin windows) may block simulated keystrokes. Try running Parakeet as administrator, or manually paste with `Ctrl+V`.
+- **Paste doesn't work in some apps** - Some applications (e.g., elevated/admin windows) may block simulated keystrokes. Try running Hoppy Whisper as administrator, or manually paste with `Ctrl+V`.
 
 - **Poetry reports an unsupported Python version** - Ensure Python 3.11 is installed and run `py -3.11 -m poetry env use 3.11` to point Poetry at the correct interpreter.
 

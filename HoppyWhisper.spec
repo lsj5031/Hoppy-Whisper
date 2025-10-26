@@ -1,9 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec for Parakeet (Windows).
+PyInstaller spec for Hoppy Whisper (Windows).
 
 This builds an onedir layout for easier inspection/debugging of bundled DLLs.
-Set PARAKEET_INCLUDE_DML=1 to include DirectML provider binaries (when using
+Set HOPPY_WHISPER_INCLUDE_DML=1 (or legacy PARAKEET_INCLUDE_DML=1) to include DirectML provider binaries (when using
 onnxruntime-directml). By default, we bundle CPU-only ORT binaries.
 """
 
@@ -13,7 +13,7 @@ import certifi
 from PyInstaller.utils.hooks import collect_dynamic_libs
 
 SCRIPT = 'src/app/__main__.py'
-INCLUDE_DML = bool(os.environ.get('PARAKEET_INCLUDE_DML'))
+INCLUDE_DML = bool(os.environ.get('HOPPY_WHISPER_INCLUDE_DML') or os.environ.get('PARAKEET_INCLUDE_DML'))
 
 # Collect ORT dynamic libraries and ensure capi/provider bits are present.
 _ort_binaries = []
@@ -151,9 +151,9 @@ datas = [
     (certifi.where(), 'certifi'),
 ]
 
-# Fallback: include nemo128.onnx from Parakeet cache if present
+# Fallback: include nemo128.onnx from Hoppy Whisper cache if present
 try:
-    cache_dir = Path(os.environ.get('LOCALAPPDATA', Path.home() / '.local' / 'share')) / 'Parakeet' / 'models'
+    cache_dir = Path(os.environ.get('LOCALAPPDATA', Path.home() / '.local' / 'share')) / 'Hoppy Whisper' / 'models'
     nemo = cache_dir / 'nemo128.onnx'
     if nemo.exists():
         datas.append((str(nemo), 'onnx_asr/preprocessors'))
@@ -162,7 +162,7 @@ except Exception:
 
 # Bundle model assets from local cache if present (for offline distribution)
 try:
-    cache_dir = Path(os.environ.get('LOCALAPPDATA', Path.home() / '.local' / 'share')) / 'Parakeet' / 'models'
+    cache_dir = Path(os.environ.get('LOCALAPPDATA', Path.home() / '.local' / 'share')) / 'Hoppy Whisper' / 'models'
     model_files = [
         'encoder-model.int8.onnx',
         'decoder_joint-model.int8.onnx',
@@ -172,10 +172,21 @@ try:
     for _fname in model_files:
         _fpath = cache_dir / _fname
         if _fpath.exists():
-            # Place under dist/Parakeet/models/
+            # Place under dist/Hoppy Whisper/models/
             datas.append((str(_fpath), 'models'))
         else:
-            print(f"[Parakeet.spec] Warning: {_fname} not found in {cache_dir}; skip bundling")
+            print(f"[HoppyWhisper.spec] Warning: {_fname} not found in {cache_dir}; skip bundling")
+except Exception:
+    pass
+
+# Include tray ICO assets
+try:
+    ico_dir = Path('icos')
+    if ico_dir.exists():
+        for _ico in ico_dir.glob('*.ico'):
+            datas.append((str(_ico), 'icos'))
+    else:
+        print('[HoppyWhisper.spec] Warning: icos directory not found; tray icons may fall back to transparent frames')
 except Exception:
     pass
 
@@ -199,7 +210,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='Parakeet',
+    name='Hoppy Whisper',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -218,5 +229,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=['onnxruntime_pybind11_state.pyd', 'onnxruntime.dll', 'onnxruntime_providers_shared.dll'],
-    name='Parakeet',
+    name='Hoppy Whisper',
 )

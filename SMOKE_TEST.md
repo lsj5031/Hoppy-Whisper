@@ -1,6 +1,6 @@
-# Parakeet Smoke Test Checklist
+# Hoppy Whisper Smoke Test Checklist
 
-This document provides a comprehensive smoke test checklist for verifying the Parakeet build on a clean Windows VM.
+This document provides a comprehensive smoke test checklist for verifying the Hoppy Whisper build on a clean Windows VM.
 
 ## Prerequisites
 
@@ -11,8 +11,8 @@ This document provides a comprehensive smoke test checklist for verifying the Pa
 
 ## Pre-Test Setup
 
-1. Download the latest `Parakeet-windows-x86_64.zip` from GitHub Releases
-2. Extract the zip file to a test directory (e.g., `C:\Test\Parakeet`)
+1. Download the latest `Hoppy Whisper-CPU.exe` from GitHub Releases
+2. Place the executable in a test directory (e.g., `C:\Test\Hoppy Whisper`)
 3. Ensure Windows Defender or antivirus doesn't block the executable
 4. Enable microphone access in Windows Privacy Settings:
    - Go to **Settings > Privacy & Security > Microphone**
@@ -24,7 +24,7 @@ This document provides a comprehensive smoke test checklist for verifying the Pa
 
 **Expected:** Application starts without errors and shows first-run notification.
 
-- [ ] Double-click `Parakeet.exe`
+- [ ] Double-click `Hoppy Whisper-CPU.exe`
 - [ ] Application launches and tray icon appears (should show idle state)
 - [ ] First-run notification appears explaining the default hotkey
 - [ ] No console window appears (windowed mode)
@@ -47,14 +47,14 @@ This document provides a comprehensive smoke test checklist for verifying the Pa
 - [ ] Release the hotkey
 - [ ] Icon changes to "Transcribing" state (spinner animation)
 - [ ] Application downloads models (may take 30-60 seconds on first run)
-- [ ] Models are cached to `%LOCALAPPDATA%\Parakeet\models\`
+- [ ] Models are cached to `%LOCALAPPDATA%\Hoppy Whisper\models\`
 - [ ] After transcription completes, text is copied to clipboard
 - [ ] Success notification appears with transcribed text preview
 
 **On failure:**
 - Check internet connection
 - Verify firewall isn't blocking HTTPS requests to huggingface.co
-- Check `%LOCALAPPDATA%\Parakeet\models\` for partial downloads
+- Check `%LOCALAPPDATA%\Hoppy Whisper\models\` for partial downloads
 - Look for error notifications
 
 ---
@@ -67,7 +67,7 @@ This document provides a comprehensive smoke test checklist for verifying the Pa
 
 - [ ] Open Notepad
 - [ ] Press and hold `Ctrl+Shift+;`
-- [ ] Speak: "This is a test of the Parakeet transcription system"
+- [ ] Speak: "This is a test of the Hoppy Whisper transcription system"
 - [ ] Release the hotkey
 - [ ] Wait for transcription to complete
 - [ ] Verify text is copied to clipboard (paste manually with `Ctrl+V`)
@@ -87,7 +87,7 @@ This document provides a comprehensive smoke test checklist for verifying the Pa
 
 - [ ] Right-click tray icon → Settings
 - [ ] Edit `settings.json` and set `"auto_paste": true`
-- [ ] Save and restart Parakeet
+- [ ] Save and restart Hoppy Whisper
 - [ ] Press and hold `Ctrl+Shift+;`
 - [ ] Speak: "Auto paste enabled"
 - [ ] Release the hotkey
@@ -121,7 +121,7 @@ This document provides a comprehensive smoke test checklist for verifying the Pa
 - [ ] Results update in real-time (FTS5 search)
 - [ ] Press `Enter` to copy selected item to clipboard
 - [ ] Press `Esc` to close palette
-- [ ] Verify history database exists at `%LOCALAPPDATA%\Parakeet\history.db`
+- [ ] Verify history database exists at `%LOCALAPPDATA%\Hoppy Whisper\history.db`
 
 ---
 
@@ -130,7 +130,7 @@ This document provides a comprehensive smoke test checklist for verifying the Pa
 **Expected:** Settings are persisted and applied correctly.
 
 - [ ] Right-click tray icon → Settings
-- [ ] File explorer opens to `%LOCALAPPDATA%\Parakeet\settings.json`
+- [ ] File explorer opens to `%LOCALAPPDATA%\Hoppy Whisper\settings.json`
 - [ ] Edit settings:
   ```json
   {
@@ -141,10 +141,10 @@ This document provides a comprehensive smoke test checklist for verifying the Pa
     "auto_paste": false
   }
   ```
-- [ ] Save and restart Parakeet
+- [ ] Save and restart Hoppy Whisper
 - [ ] Verify new hotkey works (`Ctrl+Alt+V`)
 - [ ] Verify paste window is 3 seconds
-- [ ] Check registry key: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Parakeet`
+- [ ] Check registry key: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Hoppy Whisper`
 
 ---
 
@@ -153,9 +153,9 @@ This document provides a comprehensive smoke test checklist for verifying the Pa
 **Expected:** Application starts automatically on login when enabled.
 
 - [ ] Right-click tray icon → Start with Windows (check)
-- [ ] Verify registry key exists: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Parakeet`
+- [ ] Verify registry key exists: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Hoppy Whisper`
 - [ ] Log out and log back in (or reboot)
-- [ ] Verify Parakeet starts automatically
+- [ ] Verify Hoppy Whisper starts automatically
 - [ ] Tray icon appears within 5 seconds of login
 
 ---
@@ -175,7 +175,7 @@ This document provides a comprehensive smoke test checklist for verifying the Pa
 #### 8b. Hotkey Conflict
 
 - [ ] Use another application to register `Ctrl+Shift+;` (e.g., AutoHotkey)
-- [ ] Launch Parakeet
+- [ ] Launch Hoppy Whisper
 - [ ] Verify error dialog: "Hotkey already in use by another application"
 - [ ] Application does not start (exits gracefully)
 
@@ -238,12 +238,12 @@ Test paste functionality in:
 
 - [ ] Right-click tray icon → Quit
 - [ ] Application exits completely
-- [ ] Delete `Parakeet.exe`
-- [ ] Verify registry key removed: `HKCU\...\Run\Parakeet` (if Start with Windows was enabled)
+- [ ] Delete `Hoppy Whisper-CPU.exe`
+- [ ] Verify registry key removed: `HKCU\...\Run\Hoppy Whisper` (if Start with Windows was enabled)
 - [ ] Optionally delete user data:
-  - `%LOCALAPPDATA%\Parakeet\settings.json`
-  - `%LOCALAPPDATA%\Parakeet\models\`
-  - `%LOCALAPPDATA%\Parakeet\history.db`
+  - `%LOCALAPPDATA%\Hoppy Whisper\settings.json`
+  - `%LOCALAPPDATA%\Hoppy Whisper\models\`
+  - `%LOCALAPPDATA%\Hoppy Whisper\history.db`
 
 ---
 

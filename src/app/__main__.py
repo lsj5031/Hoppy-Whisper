@@ -1,4 +1,4 @@
-"""Command-line entry point for the Parakeet tray application."""
+"""Command-line entry point for the Hoppy Whisper tray application."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from app.settings import (
 from app.transcriber import ParakeetTranscriber, load_transcriber
 from app.tray import TrayController, TrayMenuActions, TrayState
 
-LOGGER = logging.getLogger("parakeet")
+LOGGER = logging.getLogger("hoppy_whisper")
 
 
 class AppRuntime:
@@ -47,7 +47,7 @@ class AppRuntime:
         self._recording_active = False
         self._transcribe_timer: Optional[threading.Timer] = None
         self._idle_timer: Optional[threading.Timer] = None
-        self._app_name = "Parakeet"
+        self._app_name = "Hoppy Whisper"
         self._startup_command = startup.resolve_startup_command()
         # VAD state
         self._vad = None
@@ -95,7 +95,7 @@ class AppRuntime:
 
     def start(self) -> None:
         """Start the tray icon and hotkey listener."""
-        LOGGER.info("Starting Parakeet runtime")
+        LOGGER.info("Starting Hoppy Whisper runtime")
         self._tray.start()
         self._hotkey.start()
         if self._settings.start_with_windows:
@@ -108,7 +108,7 @@ class AppRuntime:
         """Shut down background services and signal termination."""
         if self._stop_event.is_set():
             return
-        LOGGER.info("Stopping Parakeet runtime")
+        LOGGER.info("Stopping Hoppy Whisper runtime")
         self._stop_event.set()
         self._cancel_timer(self._transcribe_timer)
         self._cancel_timer(self._idle_timer)
@@ -545,7 +545,7 @@ class AppRuntime:
         try:
             import subprocess
             subprocess.Popen(self._startup_command, shell=True)
-            self._notify("Restart", "Restarting Parakeet...")
+            self._notify("Restart", "Restarting Hoppy Whisper...")
         except Exception as exc:
             LOGGER.exception("Failed to restart application", exc_info=exc)
             self._notify("Restart", "Could not restart the application.")
@@ -557,10 +557,10 @@ class AppRuntime:
 def configure_logging() -> None:
     """Set up logging for console and a rolling log file.
 
-    - Console level can be overridden via PARAKEET_LOG_LEVEL (e.g., DEBUG/INFO).
-    - Detailed DEBUG logs are always written to %LOCALAPPDATA%/Parakeet/parakeet.log.
+    - Console level can be overridden via HOPPY_WHISPER_LOG_LEVEL (e.g., DEBUG/INFO).
+    - Detailed DEBUG logs are always written to %LOCALAPPDATA%/Hoppy Whisper/hoppy_whisper.log.
     """
-    level_name = os.getenv("PARAKEET_LOG_LEVEL", "INFO").upper()
+    level_name = os.getenv("HOPPY_WHISPER_LOG_LEVEL", os.getenv("PARAKEET_LOG_LEVEL", "INFO")).upper()
     console_level = getattr(logging, level_name, logging.INFO)
 
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -576,7 +576,7 @@ def configure_logging() -> None:
     # File handler (rolling)
     try:
         from logging.handlers import RotatingFileHandler
-        log_path = default_metrics_log_path().with_name("parakeet.log")
+        log_path = default_metrics_log_path().with_name("hoppy_whisper.log")
         log_path.parent.mkdir(parents=True, exist_ok=True)
         fh = RotatingFileHandler(
             str(log_path), maxBytes=1_000_000, backupCount=2, encoding="utf-8"
@@ -607,7 +607,7 @@ def _configure_ssl_certs() -> None:
         LOGGER.debug("SSL cert configuration skipped", exc_info=True)
 
 
-def show_error_dialog(message: str, title: str = "Parakeet") -> None:
+def show_error_dialog(message: str, title: str = "Hoppy Whisper") -> None:
     """Display an error dialog, falling back to stderr when necessary."""
     LOGGER.error("%s", message)
     if sys.platform == "win32":
@@ -621,10 +621,10 @@ def show_error_dialog(message: str, title: str = "Parakeet") -> None:
 
 
 def main() -> int:
-    """Launch the Parakeet tray app."""
+    """Launch the Hoppy Whisper tray app."""
     if sys.platform != "win32":
         print(
-            "Parakeet is optimized for Windows "
+            "Hoppy Whisper is optimized for Windows "
             "and may not function correctly elsewhere.",
             file=sys.stderr,
         )

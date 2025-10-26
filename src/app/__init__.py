@@ -1,4 +1,4 @@
-"""Top-level package for the Parakeet Windows tray application."""
+"""Top-level package for the Hoppy Whisper Windows tray application."""
 
 __all__ = [
     "audio",

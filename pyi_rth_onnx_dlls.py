@@ -73,10 +73,10 @@ if getattr(sys, "frozen", False):
                         ctypes.WinDLL(str(p))  # Preload
                         LOGGER.debug(f"Preloaded VC++ DLL: {dll}")
                     except Exception as e:
-                        if os.environ.get("PARAKEET_ORT_DEBUG"):
+                        if os.environ.get("HOPPY_WHISPER_ORT_DEBUG") or os.environ.get("PARAKEET_ORT_DEBUG"):
                             LOGGER.warning(f"Failed to preload {dll}: {e}")
         except Exception as e:
-            if os.environ.get("PARAKEET_ORT_DEBUG"):
+            if os.environ.get("HOPPY_WHISPER_ORT_DEBUG") or os.environ.get("PARAKEET_ORT_DEBUG"):
                 LOGGER.warning(f"Failed to setup VC++ DLL preloading: {e}")
 
     for base in bases:
@@ -88,14 +88,14 @@ if getattr(sys, "frozen", False):
     try:
         import ctypes
 
-        debug = os.environ.get("PARAKEET_ORT_DEBUG")
+        debug = os.environ.get("HOPPY_WHISPER_ORT_DEBUG") or os.environ.get("PARAKEET_ORT_DEBUG")
         debug_path: Path | None = None
         if debug:
             try:
                 localappdata = os.environ.get(
                     "LOCALAPPDATA", str(bases[0] if bases else ".")
                 )
-                log_dir = Path(localappdata) / "Parakeet"
+                log_dir = Path(localappdata) / "Hoppy Whisper"
                 log_dir.mkdir(parents=True, exist_ok=True)
                 debug_path = log_dir / "ort_dll_debug.log"
                 with debug_path.open("a", encoding="utf-8") as fh:

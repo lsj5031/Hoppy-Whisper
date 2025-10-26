@@ -68,7 +68,7 @@ jobs:
               "nemo128.onnx",
           ]
           appdata = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local" / "share"))
-          cache = appdata / "Parakeet" / "models"
+          cache = appdata / "Hoppy Whisper" / "models"
           cache.mkdir(parents=True, exist_ok=True)
           for f in files:
               src = dl(repo_id=repo, filename=f)
@@ -81,20 +81,21 @@ jobs:
       - name: Build PyInstaller (CPU onefile)
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         run: |
+          Remove-Item Env:HOPPY_WHISPER_INCLUDE_DML -ErrorAction SilentlyContinue
           Remove-Item Env:PARAKEET_INCLUDE_DML -ErrorAction SilentlyContinue
-          poetry run pyinstaller --noconfirm --clean Parakeet_onefile.spec
+          poetry run pyinstaller --noconfirm --clean HoppyWhisper_onefile.spec
 
       - name: Verify build output (CPU)
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         run: |
-          if (-not (Test-Path -Path "dist\Parakeet-CPU.exe")) { throw "Parakeet-CPU.exe not found in dist directory" }
+          if (-not (Test-Path -Path "dist\Hoppy Whisper-CPU.exe")) { throw "Hoppy Whisper-CPU.exe not found in dist directory" }
 
       - name: Upload artifact (CPU)
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         uses: actions/upload-artifact@v4
         with:
-          name: parakeet-windows-onefile-cpu
-          path: dist/Parakeet-CPU.exe
+          name: hoppy-whisper-windows-onefile-cpu
+          path: "dist/Hoppy Whisper-CPU.exe"
           if-no-files-found: error
 
   release:
@@ -106,11 +107,11 @@ jobs:
       - name: Download artifact (CPU)
         uses: actions/download-artifact@v4
         with:
-          name: parakeet-windows-onefile-cpu
+          name: hoppy-whisper-windows-onefile-cpu
           path: release
 
       - name: Publish GitHub Release (CPU)
         uses: softprops/action-gh-release@v2
         with:
-          files: release/Parakeet-CPU.exe
+          files: "release/Hoppy Whisper-CPU.exe"
           generate_release_notes: true

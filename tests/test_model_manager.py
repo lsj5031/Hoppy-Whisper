@@ -55,7 +55,7 @@ def test_model_manager_default_cache_dir() -> None:
     """Test default cache directory resolution."""
     manager = ModelManager()
     assert manager.cache_dir.exists()
-    assert "Parakeet" in str(manager.cache_dir)
+    assert "Hoppy Whisper" in str(manager.cache_dir)
     assert "models" in str(manager.cache_dir)
 
 

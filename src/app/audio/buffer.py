@@ -106,7 +106,7 @@ class TempWavFile:
         sample_rate: int,
         channels: int = 1,
         cleanup: bool = True,
-        prefix: str = "parakeet_",
+        prefix: str = "hoppy_whisper_",
         suffix: str = ".wav",
     ) -> None:
         """

@@ -1,4 +1,4 @@
-"""Enumeration of the tray icon states used by the Parakeet app."""
+"""Enumeration of the tray icon states used by the Hoppy Whisper app."""
 
 from __future__ import annotations
 

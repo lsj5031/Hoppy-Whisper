@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-SETTINGS_ENV_VAR = "PARAKEET_SETTINGS_PATH"
+SETTINGS_ENV_VAR = "HOPPY_WHISPER_SETTINGS_PATH"
 
 
 @dataclass
@@ -66,7 +66,8 @@ class AppSettings:
 
 def default_settings_path() -> Path:
     """Resolve the path used to persist settings."""
-    override = os.getenv(SETTINGS_ENV_VAR)
+    # Prefer new env var, fall back to legacy for compatibility
+    override = os.getenv(SETTINGS_ENV_VAR) or os.getenv("PARAKEET_SETTINGS_PATH")
     if override:
         return Path(override)
     local_app_data = os.getenv("LOCALAPPDATA")
@@ -74,7 +75,7 @@ def default_settings_path() -> Path:
         base = Path(local_app_data)
     else:
         base = Path.home() / "AppData" / "Local"
-    return base / "Parakeet" / "settings.json"
+    return base / "Hoppy Whisper" / "settings.json"
 
 
 def default_history_db_path() -> Path:
@@ -84,7 +85,7 @@ def default_history_db_path() -> Path:
         base = Path(local_app_data)
     else:
         base = Path.home() / "AppData" / "Local"
-    return base / "Parakeet" / "history.db"
+    return base / "Hoppy Whisper" / "history.db"
 
 
 def default_metrics_log_path() -> Path:
@@ -94,4 +95,4 @@ def default_metrics_log_path() -> Path:
         base = Path(local_app_data)
     else:
         base = Path.home() / "AppData" / "Local"
-    return base / "Parakeet" / "metrics.log"
+    return base / "Hoppy Whisper" / "metrics.log"

@@ -11,7 +11,7 @@ from typing import Callable, Optional
 
 from .dao import HistoryDAO, Utterance
 
-LOGGER = logging.getLogger("parakeet.history")
+LOGGER = logging.getLogger("hoppy_whisper.history")
 
 
 class HistoryPalette:
@@ -47,7 +47,7 @@ class HistoryPalette:
     def _create_window(self) -> None:
         """Create the palette window and widgets."""
         self._root = tk.Tk()
-        self._root.title("Parakeet History")
+        self._root.title("Hoppy Whisper History")
         self._root.geometry("700x500")
         self._root.resizable(True, True)
 
@@ -272,7 +272,7 @@ class HistoryPalette:
                 return
 
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            default_name = f"parakeet_history_{timestamp}.txt"
+            default_name = f"hoppy_whisper_history_{timestamp}.txt"
 
             file_path = filedialog.asksaveasfilename(
                 defaultextension=".txt",
@@ -284,7 +284,7 @@ class HistoryPalette:
                 return
 
             with open(file_path, "w", encoding="utf-8") as f:
-                f.write("Parakeet Transcription History\n")
+                f.write("Hoppy Whisper Transcription History\n")
                 f.write("=" * 60 + "\n\n")
                 for utt in utterances:
                     created_utc = utt["created_utc"]
@@ -319,7 +319,7 @@ class HistoryPalette:
                 return
 
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            default_name = f"parakeet_history_{timestamp}.json"
+            default_name = f"hoppy_whisper_history_{timestamp}.json"
 
             file_path = filedialog.asksaveasfilename(
                 defaultextension=".json",

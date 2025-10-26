@@ -1,13 +1,19 @@
-"""Icon generation helpers for the Parakeet tray application."""
+"""Icon helpers for the Hoppy Whisper tray application.
+
+Loads artist-provided bunny ICOs from an "icos" folder (if present). Animated
+transcription uses multiple BunnyTranscribe*.ico frames when available.
+No more programmatic shape drawing is used.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
-from typing import Dict, Iterable, Tuple
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Tuple
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from .state import TrayState
 
@@ -35,10 +41,31 @@ class TrayIconFactory:
     """Generates and caches Pillow images for tray icon states."""
 
     def __init__(
-        self, sizes: Iterable[int] = ICON_SIZES, spinner_frames: int = SPINNER_FRAMES
+        self,
+        sizes: Iterable[int] = ICON_SIZES,
+        spinner_frames: Optional[int] = None,
     ) -> None:
         self._sizes = tuple(sorted(set(sizes)))
-        self._spinner_frames = spinner_frames
+        # Discover bunny ICO assets (if present)
+        self._icons_dir: Optional[Path] = _resolve_icons_dir()
+        self._idle_icon: Optional[Path] = None
+        self._listening_icon: Optional[Path] = None
+        self._transcribe_frames: List[Path] = []
+
+        if self._icons_dir:
+            self._idle_icon = _optional_file(self._icons_dir, "BunnyStandby.ico")
+            # Prefer a specific listening icon; fall back to standby if absent
+            self._listening_icon = (
+                _optional_file(self._icons_dir, "BunnyStandby.ico")
+                or _optional_file(self._icons_dir, "BunnyPause.ico")
+            )
+            self._transcribe_frames = _transcribe_frame_files(self._icons_dir)
+
+        detected_frames = len(self._transcribe_frames)
+        if spinner_frames is not None:
+            self._spinner_frames = spinner_frames
+        else:
+            self._spinner_frames = detected_frames if detected_frames > 0 else 1
 
     @property
     def sizes(self) -> Tuple[int, ...]:
@@ -84,35 +111,106 @@ class TrayIconFactory:
 
     @lru_cache(maxsize=256)  # noqa: B019
     def _load_frame(self, key: _IconKey) -> Image.Image:
-        """Generate the icon for the supplied cache key."""
-        size = key.size
-        background, border, accents = _palette_for_theme(key.theme)
-        image = Image.new("RGBA", (size, size), background)
-        draw = ImageDraw.Draw(image)
+        """Load the icon image for the given state/frame.
 
-        inset = max(1, size // 16)
-        bounds = (inset, inset, size - inset, size - inset)
+        Uses ICO assets only; falls back to a transparent placeholder when
+        specific assets are missing to keep the tray responsive.
+        """
+        # Transcribing animation frames
+        if self._icons_dir and key.state is TrayState.TRANSCRIBING and self._transcribe_frames:
+            idx = key.frame % len(self._transcribe_frames)
+            img = _open_ico_scaled(self._transcribe_frames[idx], key.size)
+            if img is not None:
+                return img
 
-        draw.ellipse(bounds, outline=border, width=max(1, size // 16))
+        # Static states: map to available assets
+        candidate: Optional[Path] = None
+        if self._icons_dir:
+            if key.state in (TrayState.IDLE, TrayState.LISTENING):
+                candidate = self._idle_icon or self._listening_icon
+            elif key.state in (TrayState.COPIED, TrayState.PASTED):
+                candidate = self._idle_icon or self._listening_icon
+            elif key.state is TrayState.ERROR:
+                candidate = _optional_file(self._icons_dir, "BunnyPause.ico") or self._idle_icon or self._listening_icon
+            if candidate:
+                img = _open_ico_scaled(candidate, key.size)
+                if img is not None:
+                    return img
 
-        if key.state is TrayState.IDLE:
-            _draw_idle(draw, bounds, accents, size)
-        elif key.state is TrayState.LISTENING:
-            _draw_listening(draw, bounds, accents, size)
-        elif key.state is TrayState.TRANSCRIBING:
-            _draw_spinner(
-                draw, bounds, accents, border, size, key.frame, self._spinner_frames
-            )
-        elif key.state is TrayState.COPIED:
-            _draw_checkmark(draw, bounds, accents, size)
-        elif key.state is TrayState.PASTED:
-            _draw_paste_arrow(draw, bounds, accents, size)
-        elif key.state is TrayState.ERROR:
-            _draw_error(draw, bounds, accents, size)
-        else:  # pragma: no cover - defensive
-            raise ValueError(f"Unhandled tray state {key.state}")
+        # Last resort: transparent placeholder
+        return Image.new("RGBA", (key.size, key.size), (0, 0, 0, 0))
 
-        return image
+
+# ---------------------------------------------------------------------------
+# Bunny ICO asset helpers
+# ---------------------------------------------------------------------------
+
+def _resolve_icons_dir() -> Optional[Path]:
+    """Locate the icos directory with bunny assets if present.
+
+    Order:
+    1) HOPPY_WHISPER_ICONS_DIR env var (legacy alternate also supported)
+    2) PyInstaller bundle dir (sys._MEIPASS)/icos
+    3) Search upward from this file for a folder named "icos" containing BunnyStandby.ico
+    """
+    import os
+    import sys
+
+    env_dir = os.getenv("HOPPY_WHISPER_ICONS_DIR") or os.getenv("PARAKEET_ICONS_DIR")
+    if env_dir:
+        p = Path(env_dir)
+        if p.is_dir():
+            return p
+
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        p = Path(base) / "icos"
+        if p.is_dir():
+            return p
+
+    here = Path(__file__).resolve()
+    for parent in [here.parent, *here.parents]:
+        p = parent / "icos"
+        if (p / "BunnyStandby.ico").exists():
+            return p
+    return None
+
+
+def _optional_file(folder: Path, name: str) -> Optional[Path]:
+    path = folder / name
+    return path if path.exists() else None
+
+
+def _transcribe_frame_files(folder: Path) -> List[Path]:
+    files = sorted(folder.glob("BunnyTranscribe*.ico"), key=lambda p: _suffix_number(p.name))
+    return [p for p in files if p.exists()]
+
+
+def _suffix_number(name: str) -> int:
+    import re
+
+    m = re.search(r"(\d+)(?=\.[^.]+$)", name)
+    return int(m.group(1)) if m else 0
+
+
+def _open_ico_scaled(path: Path, size: int) -> Optional[Image.Image]:
+    """Open an ICO and return RGBA image scaled to (size, size)."""
+    try:
+        with Image.open(path) as im:
+            getimage = getattr(im, "getimage", None)
+            target = None
+            if callable(getimage):
+                try:
+                    target = getimage((size, size))
+                except Exception:
+                    target = None
+            if target is None:
+                target = im.convert("RGBA")
+            if target.size != (size, size):
+                target = target.resize((size, size), Image.LANCZOS)
+            return target.copy()
+    except Exception:
+        return None
 
 
 def _palette_for_theme(
@@ -122,17 +220,21 @@ def _palette_for_theme(
     Tuple[int, int, int, int],
     Dict[str, Tuple[int, int, int, int]],
 ]:
+    """Legacy color palette for tests and accessibility checks.
+
+    The app no longer draws programmatic shapes, but tests rely on these
+    constants to validate theme accessibility.
+    """
     if theme is TrayTheme.HIGH_CONTRAST:
-        # High-contrast theme for accessibility
         background = (0, 0, 0, 0)
         border = (255, 255, 255, 255)
         accents = {
-            "idle": (0, 255, 255, 255),  # Cyan
-            "listening": (255, 255, 0, 255),  # Yellow
-            "spinner": (0, 255, 255, 255),  # Cyan
-            "copied": (0, 255, 0, 255),  # Green
-            "pasted": (255, 0, 255, 255),  # Magenta
-            "error": (255, 0, 0, 255),  # Red
+            "idle": (0, 255, 255, 255),
+            "listening": (255, 255, 0, 255),
+            "spinner": (0, 255, 255, 255),
+            "copied": (0, 255, 0, 255),
+            "pasted": (255, 0, 255, 255),
+            "error": (255, 0, 0, 255),
         }
     elif theme is TrayTheme.DARK:
         background = (30, 30, 30, 0)
@@ -157,132 +259,3 @@ def _palette_for_theme(
             "error": (211, 47, 47, 255),
         }
     return background, border, accents
-
-
-def _draw_idle(
-    draw: ImageDraw.ImageDraw,
-    bounds: Tuple[int, int, int, int],
-    accents: Dict[str, Tuple[int, int, int, int]],
-    size: int,
-) -> None:
-    radius = size // 6
-    center = size // 2
-    draw.ellipse(
-        (center - radius, center - radius, center + radius, center + radius),
-        fill=accents["idle"],
-    )
-
-
-def _draw_listening(
-    draw: ImageDraw.ImageDraw,
-    bounds: Tuple[int, int, int, int],
-    accents: Dict[str, Tuple[int, int, int, int]],
-    size: int,
-) -> None:
-    bar_width = max(1, size // 12)
-    gap = bar_width
-    base = bounds[0] + (bounds[2] - bounds[0]) // 2
-    heights = (size * 0.55, size * 0.8, size * 0.65)
-    for idx, height in enumerate(heights):
-        x = base + (idx - 1) * (bar_width + gap)
-        draw.rounded_rectangle(
-            (
-                x - bar_width,
-                size / 2 - height / 2,
-                x + bar_width,
-                size / 2 + height / 2,
-            ),
-            radius=bar_width,
-            fill=accents["listening"],
-        )
-
-
-def _draw_spinner(
-    draw: ImageDraw.ImageDraw,
-    bounds: Tuple[int, int, int, int],
-    accents: Dict[str, Tuple[int, int, int, int]],
-    border: Tuple[int, int, int, int],
-    size: int,
-    frame: int,
-    total_frames: int,
-) -> None:
-    thickness = max(2, size // 12)
-    inner_inset = thickness * 3 // 2
-    inner = (
-        bounds[0] + inner_inset,
-        bounds[1] + inner_inset,
-        bounds[2] - inner_inset,
-        bounds[3] - inner_inset,
-    )
-    draw.ellipse(inner, outline=border, width=thickness)
-    sweep = 360 / 6
-    start_angle = (frame / total_frames) * 360
-    end_angle = start_angle + sweep
-    draw.pieslice(inner, start=start_angle, end=end_angle, fill=accents["spinner"])
-
-
-def _draw_checkmark(
-    draw: ImageDraw.ImageDraw,
-    bounds: Tuple[int, int, int, int],
-    accents: Dict[str, Tuple[int, int, int, int]],
-    size: int,
-) -> None:
-    thickness = max(2, size // 10)
-    points = [
-        (bounds[0] + size * 0.25, bounds[1] + size * 0.55),
-        (bounds[0] + size * 0.42, bounds[1] + size * 0.72),
-        (bounds[0] + size * 0.75, bounds[1] + size * 0.32),
-    ]
-    draw.line(points, fill=accents["copied"], width=thickness, joint="curve")
-
-
-def _draw_paste_arrow(
-    draw: ImageDraw.ImageDraw,
-    bounds: Tuple[int, int, int, int],
-    accents: Dict[str, Tuple[int, int, int, int]],
-    size: int,
-) -> None:
-    arrow_width = max(2, size // 8)
-    center_x = size // 2
-    tip_y = bounds[3] - size * 0.2
-    stem_top = bounds[1] + size * 0.3
-    draw.line(
-        [(center_x, stem_top), (center_x, tip_y)],
-        fill=accents["pasted"],
-        width=arrow_width,
-    )
-    half_span = size * 0.18
-    draw.polygon(
-        [
-            (center_x - half_span, tip_y - arrow_width),
-            (center_x + half_span, tip_y - arrow_width),
-            (center_x, bounds[3] - size * 0.08),
-        ],
-        fill=accents["pasted"],
-    )
-
-
-def _draw_error(
-    draw: ImageDraw.ImageDraw,
-    bounds: Tuple[int, int, int, int],
-    accents: Dict[str, Tuple[int, int, int, int]],
-    size: int,
-) -> None:
-    thickness = max(2, size // 10)
-    margin = size * 0.3
-    draw.line(
-        [
-            (bounds[0] + margin, bounds[1] + margin),
-            (bounds[2] - margin, bounds[3] - margin),
-        ],
-        fill=accents["error"],
-        width=thickness,
-    )
-    draw.line(
-        [
-            (bounds[2] - margin, bounds[1] + margin),
-            (bounds[0] + margin, bounds[3] - margin),
-        ],
-        fill=accents["error"],
-        width=thickness,
-    )
