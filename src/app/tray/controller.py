@@ -26,7 +26,6 @@ class TrayMenuActions:
     show_settings: Callable[[], None]
     show_history: Callable[[], None]
     restart_app: Callable[[], None]
-    set_cleanup_enabled: Callable[[bool], None]
     set_start_with_windows: Callable[[bool], None]
     quit_app: Callable[[], None]
 
@@ -37,8 +36,7 @@ class TrayController:
     FIRST_RUN_TITLE = "Hoppy Whisper"
     FIRST_RUN_MESSAGE = (
         "Press Ctrl+Shift+; to start recording. "
-        "Hold to capture speech, release to stop. "
-        "Smart Cleanup can be toggled from the tray menu."
+        "Hold to capture speech, release to stop."
     )
 
     def __init__(
@@ -49,7 +47,6 @@ class TrayController:
         icon_factory: Optional[TrayIconFactory] = None,
         theme: Optional[TrayTheme] = None,
         start_with_windows: bool = False,
-        cleanup_enabled: bool = True,
         show_first_run_tip: bool = False,
     ) -> None:
         self._app_name = app_name
@@ -64,7 +61,6 @@ class TrayController:
         self._spinner_stop = threading.Event()
         self._current_frame = 0
         self._start_with_windows = start_with_windows
-        self._cleanup_enabled = cleanup_enabled
         self._show_first_run_tip = show_first_run_tip
 
     @property
@@ -127,12 +123,6 @@ class TrayController:
         if self._icon:
             self._icon.update_menu()
 
-    def toggle_cleanup_enabled(self) -> None:
-        self._cleanup_enabled = not self._cleanup_enabled
-        self._menu_actions.set_cleanup_enabled(self._cleanup_enabled)
-        if self._icon:
-            self._icon.update_menu()
-
     def _start_spinner(self) -> None:
         if self._spinner_thread and self._spinner_thread.is_alive():
             return
@@ -169,11 +159,6 @@ class TrayController:
             pystray.MenuItem("Settings", self._wrap(self._menu_actions.show_settings)),
             pystray.MenuItem("History", self._wrap(self._menu_actions.show_history)),
             pystray.MenuItem("Restart", self._wrap(self._menu_actions.restart_app)),
-            pystray.MenuItem(
-                "Smart Cleanup",
-                self._wrap(lambda: self.toggle_cleanup_enabled()),
-                checked=lambda _: self._cleanup_enabled,
-            ),
             pystray.MenuItem(
                 "Start with Windows",
                 self._wrap(lambda: self.toggle_start_with_windows()),

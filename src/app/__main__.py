@@ -16,7 +16,6 @@ from pynput.keyboard import Controller, Key
 from app import startup
 from app.audio import AudioDeviceError, AudioRecorder, create_vad
 from app.audio.buffer import TempWavFile
-from app.cleanup import CleanupEngine, CleanupMode
 from app.history import HistoryDAO, HistoryPalette
 from app.hotkey import HotkeyCallbacks, HotkeyInUseError, HotkeyManager
 from app.metrics import (
@@ -56,7 +55,6 @@ class AppRuntime:
 
         self._audio_recorder = AudioRecorder()
         self._audio_buffer: Optional[np.ndarray] = None
-        self._cleanup_engine = self._create_cleanup_engine()
         self._keyboard_controller = Controller()
         self._history = HistoryDAO(
             default_history_db_path(),
@@ -72,12 +70,10 @@ class AppRuntime:
                 show_settings=self._show_settings_tip,
                 show_history=self._show_history_tip,
                 restart_app=self._restart,
-                set_cleanup_enabled=self._set_cleanup_enabled,
                 set_start_with_windows=self._set_start_with_windows,
                 quit_app=self.stop,
             ),
             start_with_windows=registry_startup,
-            cleanup_enabled=self._settings.cleanup_enabled,
             show_first_run_tip=not settings.first_run_complete,
         )
         callbacks = HotkeyCallbacks(
@@ -258,7 +254,10 @@ class AppRuntime:
                 return
 
             self._tray.set_state(TrayState.TRANSCRIBING)
-            self._transcribe_timer = threading.Timer(0.8, self._complete_transcription)
+            delay = self._settings.transcribe_start_delay_ms / 1000.0
+            self._transcribe_timer = threading.Timer(
+                delay, self._complete_transcription
+            )
             self._transcribe_timer.start()
         except Exception as exc:
             LOGGER.exception("Failed to stop audio capture", exc_info=exc)
@@ -290,15 +289,9 @@ class AppRuntime:
                 result.text[:100],
             )
 
-            # Apply cleanup according to settings only
-            if not getattr(self._settings, "cleanup_enabled", True):
-                cleaned_text = result.text
-                cleanup_mode = "disabled"
-                LOGGER.info("Smart cleanup disabled by setting")
-            else:
-                cleaned_text = self._cleanup_engine.clean(result.text)
-                cleanup_mode = self._settings.cleanup_mode
-                LOGGER.info("Smart cleanup applied (%s)", cleanup_mode)
+            # Use raw model output (no Smart Cleanup)
+            cleaned_text = result.text
+            cleanup_mode = "raw"
 
             # Save to history
             try:
@@ -341,7 +334,6 @@ class AppRuntime:
                 "ptt_release_to_paste",
                 provider_detected=self._transcriber.provider,
                 provider_requested=getattr(self._transcriber, "provider_requested", ""),
-                cleanup_mode=cleanup_mode,
             )
             if event:
                 # Check against budget (GPU vs CPU)
@@ -388,7 +380,8 @@ class AppRuntime:
             # Small delay to ensure context switch
             import sys
             import time
-            time.sleep(0.18)
+            predelay = self._settings.paste_predelay_ms / 1000.0
+            time.sleep(predelay)
 
             if sys.platform == "win32":
                 # Use Shift+Insert as the primary paste sequence
@@ -396,6 +389,7 @@ class AppRuntime:
                     self._keyboard_controller.press(Key.insert)
                     self._keyboard_controller.release(Key.insert)
                 if allow_ctrl_v:
+                    # Small delay between paste attempts
                     time.sleep(0.08)
                     # Optional fallback: Ctrl+V
                     with self._keyboard_controller.pressed(Key.ctrl):
@@ -412,14 +406,6 @@ class AppRuntime:
         except Exception as exc:
             LOGGER.error("Failed to perform paste: %s", exc)
             self._notify("Paste Error", "Could not paste text")
-
-    def _set_cleanup_enabled(self, enabled: bool) -> None:
-        if getattr(self._settings, "cleanup_enabled", True) == enabled:
-            return
-        self._settings.cleanup_enabled = enabled
-        self._settings.save()
-        state = "enabled" if enabled else "disabled"
-        self._notify("Smart Cleanup", f"Smart cleanup {state}.")
 
     # --- VAD integration -------------------------------------------------
 
@@ -482,8 +468,14 @@ class AppRuntime:
 
     # Helpers -------------------------------------------------------------
 
-    def _schedule_idle_reset(self, delay: float = 1.6) -> None:
+    def _schedule_idle_reset(self, delay: float | None = None) -> None:
+        """Schedule a return to idle state after a delay.
+        
+        If delay is None, uses the value from settings (idle_reset_delay_ms).
+        """
         self._cancel_timer(self._idle_timer)
+        if delay is None:
+            delay = self._settings.idle_reset_delay_ms / 1000.0
         self._idle_timer = threading.Timer(delay, self._reset_to_idle)
         self._idle_timer.start()
 
@@ -529,16 +521,6 @@ class AppRuntime:
             self._settings.start_with_windows = registry_enabled
             self._settings.save()
         return registry_enabled
-
-    def _create_cleanup_engine(self) -> CleanupEngine:
-        """Create a cleanup engine based on settings."""
-        mode_str = self._settings.cleanup_mode.lower()
-        try:
-            mode = CleanupMode(mode_str)
-        except ValueError:
-            LOGGER.warning("Invalid cleanup mode '%s', using standard", mode_str)
-            mode = CleanupMode.STANDARD
-        return CleanupEngine(mode)
 
     def _restart(self) -> None:
         """Restart the application by spawning a new instance and exiting."""

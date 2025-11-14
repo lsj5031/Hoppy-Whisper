@@ -2,7 +2,6 @@
 
 __all__ = [
     "audio",
-    "cleanup",
     "history",
     "hotkey",
     "settings",

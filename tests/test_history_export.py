@@ -147,3 +147,70 @@ def test_export_dao_not_opened() -> None:
     dao = HistoryDAO(Path("dummy.db"))
     with pytest.raises(RuntimeError, match="Database not opened"):
         dao.export_all_to_dict()
+
+
+def test_iter_utterances_empty(dao: HistoryDAO) -> None:
+    """iter_utterances yields nothing for empty database."""
+    result = list(dao.iter_utterances())
+    assert result == []
+
+
+def test_iter_utterances_single_batch(dao: HistoryDAO) -> None:
+    """iter_utterances yields items with correct structure."""
+    id1 = dao.insert(text="First", mode="standard", duration_ms=1000)
+    id2 = dao.insert(text="Second", mode="standard", duration_ms=2000)
+    id3 = dao.insert(text="Third", mode="standard", duration_ms=3000)
+
+    result = list(dao.iter_utterances(batch_size=1000))
+    assert len(result) == 3
+
+    # Verify all three IDs are present
+    ids = [item["id"] for item in result]
+    assert set(ids) == {id1, id2, id3}
+    
+    # Verify structure of each item
+    for item in result:
+        assert "id" in item
+        assert "text" in item
+        assert "created_utc" in item
+        assert "duration_ms" in item
+        assert "mode" in item
+        assert "raw_text" in item
+
+
+def test_iter_utterances_multiple_batches(dao: HistoryDAO) -> None:
+    """iter_utterances batches results correctly with LIMIT/OFFSET."""
+    count = 250
+    for i in range(count):
+        dao.insert(text=f"Utterance {i}", mode="standard", duration_ms=i * 10)
+
+    # Request with small batch size to force multiple iterations
+    result = list(dao.iter_utterances(batch_size=100))
+    assert len(result) == count
+
+    # Verify all items are unique by ID
+    ids = [item["id"] for item in result]
+    assert len(ids) == len(set(ids))
+
+
+def test_iter_utterances_consistency_with_export_all(dao: HistoryDAO) -> None:
+    """iter_utterances produces same result as export_all_to_dict."""
+    for i in range(50):
+        dao.insert(text=f"Item {i}", mode="test", duration_ms=1000 + i)
+
+    iter_result = list(dao.iter_utterances(batch_size=1000))
+    export_result = dao.export_all_to_dict()
+
+    assert len(iter_result) == len(export_result)
+    
+    # Compare sorted IDs to ensure same items
+    iter_ids = sorted([item["id"] for item in iter_result])
+    export_ids = sorted([item["id"] for item in export_result])
+    assert iter_ids == export_ids
+
+
+def test_iter_utterances_dao_not_opened() -> None:
+    """iter_utterances raises if database not opened."""
+    dao = HistoryDAO(Path("dummy.db"))
+    with pytest.raises(RuntimeError, match="Database not opened"):
+        list(dao.iter_utterances())

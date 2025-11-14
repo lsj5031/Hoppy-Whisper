@@ -19,11 +19,13 @@ class AppSettings:
     paste_window_seconds: float = 2.0
     start_with_windows: bool = False
     first_run_complete: bool = False
-    cleanup_mode: str = "standard"
-    cleanup_enabled: bool = True
     auto_paste: bool = True
     history_retention_days: int = 90
     telemetry_enabled: bool = False
+    # Timing parameters (in milliseconds)
+    transcribe_start_delay_ms: float = 800.0
+    paste_predelay_ms: float = 180.0
+    idle_reset_delay_ms: float = 1600.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the settings to a dictionary."""
@@ -31,7 +33,11 @@ class AppSettings:
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "AppSettings":
-        """Create a settings instance from a dictionary payload."""
+        """Create a settings instance from a dictionary payload.
+        
+        Ignores unknown keys to ensure backward compatibility with
+        older settings.json files that may contain cleanup_mode, cleanup_enabled, etc.
+        """
         data = dict(payload)
         if "hotkey_chord" in data and isinstance(data["hotkey_chord"], str):
             data["hotkey_chord"] = data["hotkey_chord"].upper()

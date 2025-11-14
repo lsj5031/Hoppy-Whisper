@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import logging
 import sys
 import threading
 import time
@@ -12,6 +13,8 @@ from typing import Callable, Optional, Set
 from pynput import keyboard
 
 from .chord import HotkeyChord, parse_hotkey
+
+LOGGER = logging.getLogger("hoppy_whisper.hotkey")
 
 
 class HotkeyError(Exception):
@@ -248,13 +251,23 @@ class HotkeyManager:
             self._registered = False
 
     def _dispatch(self, handler: Callable[[], None]) -> None:
+        """Dispatch a callback, ensuring errors are always logged.
+        
+        Logs any exception from the handler, then attempts to call the on_error
+        callback. If the on_error callback also raises, that error is logged too
+        (double-logging is preferable to silently swallowing errors).
+        """
         try:
             handler()
         except Exception as exc:  # pragma: no cover - defensive
+            # Always log the handler error first
+            LOGGER.exception("Callback error in hotkey handler", exc_info=exc)
+            # Then try to invoke the error callback
             try:
                 self._callbacks.on_error(exc)
-            except Exception:
-                pass
+            except Exception as err:
+                # Log if on_error callback itself fails
+                LOGGER.exception("Error callback also failed", exc_info=err)
 
 
 

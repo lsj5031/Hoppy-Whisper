@@ -1,202 +1,190 @@
 # Hoppy Whisper Smoke Test Checklist
 
-This document provides a comprehensive smoke test checklist for verifying the Hoppy Whisper build on a clean Windows VM.
+This document provides a smoke test checklist for verifying a Hoppy Whisper release build on a clean Windows machine.
+
+---
 
 ## Prerequisites
 
-- **Clean Windows 11 VM** with no development tools installed
-- **No Python** installed on the system
-- **Microphone** available (or virtual audio device for testing)
-- **Internet connection** for first-run model download
+- Clean Windows 11 (or Windows 10) machine/VM with no development tools installed
+- No system-wide Python required
+- Microphone available (or virtual audio device)
+- Internet connection for first-run model download
+
+---
 
 ## Pre-Test Setup
 
-1. Download the latest `Hoppy Whisper-CPU.exe` from GitHub Releases
-2. Place the executable in a test directory (e.g., `C:\Test\Hoppy Whisper`)
-3. Ensure Windows Defender or antivirus doesn't block the executable
-4. Enable microphone access in Windows Privacy Settings:
-   - Go to **Settings > Privacy & Security > Microphone**
-   - Enable "Let apps access your microphone"
-
-## Test Plan
-
-### 1. First Launch
-
-**Expected:** Application starts without errors and shows first-run notification.
-
-- [ ] Double-click `Hoppy Whisper-CPU.exe`
-- [ ] Application launches and tray icon appears (should show idle state)
-- [ ] First-run notification appears explaining the default hotkey
-- [ ] No console window appears (windowed mode)
-- [ ] No error dialogs
-
-**On failure:**
-- Check Event Viewer for application errors
-- Look for missing DLL errors
-- Verify antivirus isn't blocking execution
+1. Download the latest `Hoppy Whisper-CPU.exe` from GitHub Releases.
+2. Place the executable in a test directory (for example, `C:\Test\Hoppy Whisper`).
+3. Ensure Windows Defender / antivirus does not block the executable.
+4. Enable microphone access in Windows privacy settings:
+   - Settings → Privacy & Security → Microphone
+   - Enable “Let apps access your microphone”.
 
 ---
 
-### 2. Model Download
+## 1. First Launch
 
-**Expected:** Models download automatically from Hugging Face on first transcription attempt.
+**Expected:** Application starts without errors and shows the first‑run notification.
 
-- [ ] Press the default hotkey `Ctrl+Shift+;`
-- [ ] Icon changes to "Listening" state (animated microphone)
-- [ ] Speak a short phrase: "Testing one two three"
-- [ ] Release the hotkey
-- [ ] Icon changes to "Transcribing" state (spinner animation)
-- [ ] Application downloads models (may take 30-60 seconds on first run)
-- [ ] Models are cached to `%LOCALAPPDATA%\Hoppy Whisper\models\`
-- [ ] After transcription completes, text is copied to clipboard
-- [ ] Success notification appears with transcribed text preview
+- [ ] Double‑click `Hoppy Whisper-CPU.exe`.
+- [ ] Application launches and tray icon appears (idle state).
+- [ ] First‑run notification appears explaining the default hotkey.
+- [ ] No console window appears.
+- [ ] No error dialogs are shown.
 
-**On failure:**
-- Check internet connection
-- Verify firewall isn't blocking HTTPS requests to huggingface.co
-- Check `%LOCALAPPDATA%\Hoppy Whisper\models\` for partial downloads
-- Look for error notifications
+On failure:
+
+- Check Event Viewer for application errors.
+- Look for missing DLL errors.
+- Verify antivirus is not blocking execution.
 
 ---
 
-### 3. Hotkey Recording Workflow
+## 2. Model Download
 
-**Expected:** Press-and-hold to record, release to transcribe, press again to paste.
+**Expected:** Models download automatically on the first transcription attempt.
 
-#### 3a. Basic Recording
+- [ ] Press the default hotkey `Ctrl+Shift+;`.
+- [ ] Icon changes to “Listening” state (microphone).
+- [ ] Speak a short phrase: “Testing one two three”.
+- [ ] Release the hotkey.
+- [ ] Icon changes to “Transcribing” state (spinner).
+- [ ] Application downloads models (may take 30–60 seconds on first run).
+- [ ] Models are cached to `%LOCALAPPDATA%\Hoppy Whisper\models\`.
+- [ ] After transcription completes, text is copied to the clipboard.
+- [ ] Success notification appears with a preview of the transcription.
 
-- [ ] Open Notepad
-- [ ] Press and hold `Ctrl+Shift+;`
-- [ ] Speak: "This is a test of the Hoppy Whisper transcription system"
-- [ ] Release the hotkey
-- [ ] Wait for transcription to complete
-- [ ] Verify text is copied to clipboard (paste manually with `Ctrl+V`)
-- [ ] Transcribed text appears in Notepad with proper capitalization and punctuation
+On failure:
 
-#### 3b. Same-Hotkey Paste
-
-- [ ] Open a new Notepad window
-- [ ] Press and hold `Ctrl+Shift+;`
-- [ ] Speak: "Testing automatic paste feature"
-- [ ] Release the hotkey
-- [ ] Immediately press `Ctrl+Shift+;` again within 2 seconds
-- [ ] Text automatically pastes into Notepad (Ctrl+V simulated)
-- [ ] Icon shows "Pasted" state (arrow icon)
-
-#### 3c. Auto-Paste Mode
-
-- [ ] Right-click tray icon → Settings
-- [ ] Edit `settings.json` and set `"auto_paste": true`
-- [ ] Save and restart Hoppy Whisper
-- [ ] Press and hold `Ctrl+Shift+;`
-- [ ] Speak: "Auto paste enabled"
-- [ ] Release the hotkey
-- [ ] Text automatically pastes without pressing hotkey again
+- Check internet connection.
+- Verify firewall is not blocking HTTPS requests to `huggingface.co`.
+- Check `%LOCALAPPDATA%\Hoppy Whisper\models\` for partial downloads.
+- Look for error notifications.
 
 ---
 
-### 4. Smart Cleanup
+## 3. Hotkey Recording Workflow
 
-**Expected:** Transcribed text is cleaned with punctuation, capitalization, and filler removal.
+**Expected:** Press‑and‑hold to record, release to transcribe, optional paste.
 
-#### 4a. Standard Cleanup
+### 3a. Basic Recording
 
-- [ ] Press and hold hotkey, speak: "um so like this is you know a test"
-- [ ] Release hotkey
-- [ ] Verify clipboard contains: "This is a test" (fillers removed)
-- [ ] Verify proper capitalization
+- [ ] Open Notepad.
+- [ ] Press and hold `Ctrl+Shift+;`.
+- [ ] Speak: “This is a test of the Hoppy Whisper transcription system”.
+- [ ] Release the hotkey.
+- [ ] Wait for transcription to complete.
+- [ ] Paste manually with `Ctrl+V`.
+- [ ] Transcribed text appears in Notepad with reasonable capitalization and punctuation.
 
-<!-- Shift-to-bypass behavior has been removed; all transcriptions follow the configured cleanup setting. -->
+### 3b. Same‑Hotkey Paste
+
+- [ ] Open a new Notepad window.
+- [ ] Press and hold `Ctrl+Shift+;`.
+- [ ] Speak: “Testing automatic paste feature”.
+- [ ] Release the hotkey.
+- [ ] Press `Ctrl+Shift+;` again within the paste window (default 2 seconds).
+- [ ] Text is automatically pasted into Notepad.
+- [ ] Icon shows “Pasted” state.
+
+### 3c. Auto‑Paste Mode
+
+- [ ] Right‑click tray icon → Settings.
+- [ ] Edit `settings.json` and set `"auto_paste": true`.
+- [ ] Save and restart Hoppy Whisper.
+- [ ] Press and hold `Ctrl+Shift+;`, say “Auto paste enabled”, then release.
+- [ ] Text automatically pastes without pressing the hotkey a second time.
 
 ---
 
-### 5. History & Search
+## 4. History & Search
 
-**Expected:** All transcriptions are saved to local SQLite database with FTS5 search.
+**Expected:** Transcriptions are saved to local SQLite history with FTS5 search.
 
-- [ ] Right-click tray icon → History
-- [ ] History palette window opens
-- [ ] Previous transcriptions are listed
-- [ ] Type search query (e.g., "test")
-- [ ] Results update in real-time (FTS5 search)
-- [ ] Press `Enter` to copy selected item to clipboard
-- [ ] Press `Esc` to close palette
-- [ ] Verify history database exists at `%LOCALAPPDATA%\Hoppy Whisper\history.db`
+- [ ] Right‑click tray icon → History.
+- [ ] History palette window opens.
+- [ ] Previous transcriptions are listed.
+- [ ] Type a search query (for example, “test”).
+- [ ] Results update as you type.
+- [ ] Press Enter to copy selected item to the clipboard.
+- [ ] Press Esc to close the palette.
+- [ ] Verify history database exists at `%LOCALAPPDATA%\Hoppy Whisper\history.db`.
 
 ---
 
-### 6. Settings & Configuration
+## 5. Settings & Configuration
 
 **Expected:** Settings are persisted and applied correctly.
 
-- [ ] Right-click tray icon → Settings
-- [ ] File explorer opens to `%LOCALAPPDATA%\Hoppy Whisper\settings.json`
-- [ ] Edit settings:
+- [ ] Right‑click tray icon → Settings.
+- [ ] File Explorer opens to `%LOCALAPPDATA%\Hoppy Whisper\settings.json`.
+- [ ] Edit settings to:
+
   ```json
   {
     "hotkey_chord": "CTRL+ALT+V",
     "paste_window_seconds": 3.0,
-    "cleanup_mode": "conservative",
     "start_with_windows": true,
     "auto_paste": false
   }
   ```
-- [ ] Save and restart Hoppy Whisper
-- [ ] Verify new hotkey works (`Ctrl+Alt+V`)
-- [ ] Verify paste window is 3 seconds
-- [ ] Check registry key: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Hoppy Whisper`
+
+- [ ] Save and restart Hoppy Whisper.
+- [ ] Verify the new hotkey (`Ctrl+Alt+V`) starts recording.
+- [ ] Verify paste window is approximately 3 seconds.
 
 ---
 
-### 7. Start with Windows
+## 6. Start with Windows
 
 **Expected:** Application starts automatically on login when enabled.
 
-- [ ] Right-click tray icon → Start with Windows (check)
-- [ ] Verify registry key exists: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Hoppy Whisper`
-- [ ] Log out and log back in (or reboot)
-- [ ] Verify Hoppy Whisper starts automatically
-- [ ] Tray icon appears within 5 seconds of login
+- [ ] Right‑click tray icon → Start with Windows (check to enable).
+- [ ] Verify registry key exists:
+  - `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Hoppy Whisper`
+- [ ] Log out and back in (or reboot).
+- [ ] Verify Hoppy Whisper starts automatically and tray icon appears within ~5 seconds.
 
 ---
 
-### 8. Error Handling
+## 7. Error Handling
 
-**Expected:** Application handles errors gracefully with clear messages.
+**Expected:** Application handles common errors gracefully with clear messages.
 
-#### 8a. Microphone Missing
+### 7a. Microphone Missing
 
-- [ ] Disable all audio input devices
-- [ ] Press hotkey
-- [ ] Verify error notification: "Microphone Error: No audio input device available"
-- [ ] Icon shows error state (red X)
-- [ ] Application does not crash
+- [ ] Disable all audio input devices.
+- [ ] Press the hotkey.
+- [ ] Verify error notification: “Microphone Error: No audio input device available”.
+- [ ] Icon shows error state (for example, red X).
+- [ ] Application does not crash.
 
-#### 8b. Hotkey Conflict
+### 7b. Hotkey Conflict
 
-- [ ] Use another application to register `Ctrl+Shift+;` (e.g., AutoHotkey)
-- [ ] Launch Hoppy Whisper
-- [ ] Verify error dialog: "Hotkey already in use by another application"
-- [ ] Application does not start (exits gracefully)
+- [ ] Use another application (for example, AutoHotkey) to register `Ctrl+Shift+;`.
+- [ ] Launch Hoppy Whisper.
+- [ ] Verify error dialog: “Hotkey already in use by another application”.
+- [ ] Application exits gracefully (does not remain running without a hotkey).
 
-#### 8c. Short Recording
+### 7c. Short Recording
 
-- [ ] Press and immediately release hotkey (<0.1 seconds)
-- [ ] Verify notification: "Recording Too Short: Please hold the hotkey longer"
-- [ ] Icon shows error state
-- [ ] Application recovers to idle state
+- [ ] Press and immediately release the hotkey (<0.1 seconds).
+- [ ] Verify notification: “Recording Too Short: Please hold the hotkey longer”.
+- [ ] Icon shows error state then returns to idle.
 
 ---
 
-### 9. Multi-Application Paste Test
+## 8. Multi‑Application Paste
 
-**Expected:** Paste works correctly in various applications.
+**Expected:** Paste works correctly in multiple applications.
 
-Test paste functionality in:
+Test paste in:
 
 - [ ] Notepad
 - [ ] Microsoft Word
-- [ ] Microsoft Teams (chat window)
+- [ ] Microsoft Teams (chat)
 - [ ] Slack desktop app
 - [ ] Outlook email composer
 - [ ] VS Code
@@ -204,42 +192,43 @@ Test paste functionality in:
 
 ---
 
-### 10. Performance & Resource Usage
+## 9. Performance & Resource Usage
 
-**Expected:** Low CPU when idle, fast transcription on GPU.
+**Expected:** Low CPU when idle and acceptable end‑to‑end latency.
 
-- [ ] Open Task Manager
-- [ ] Monitor Hoppy CPU usage when idle: **<1%**
-- [ ] Record a 5-7 second utterance
-- [ ] Note transcription time from release to clipboard:
-  - **GPU (DirectML):** ≤600 ms
-  - **CPU fallback:** ≤1.2 seconds
-- [ ] Verify no memory leaks after 10+ transcriptions
-- [ ] Check final memory usage: **<200 MB idle**
-
----
-
-### 11. Accessibility Features
-
-**Expected:** High-contrast icons, keyboard navigation work correctly.
-
-- [ ] Enable Windows High Contrast mode
-- [ ] Verify tray icon switches to high-contrast variants
-- [ ] Right-click tray icon
-- [ ] Navigate menu using arrow keys
-- [ ] Press Enter to activate menu items
-- [ ] Verify all menu items are keyboard-accessible
+- [ ] Open Task Manager.
+- [ ] Monitor CPU usage when idle: target <1%.
+- [ ] Record a 5–7 second utterance.
+- [ ] Measure time from hotkey release to clipboard ready:
+  - **GPU (DirectML):** target ≲ 600 ms.
+  - **CPU fallback:** target ≲ 1.2 seconds.
+- [ ] Verify there are no obvious memory leaks after 10+ transcriptions.
+- [ ] Check idle memory usage after tests (target <200 MB).
 
 ---
 
-### 12. Cleanup & Uninstall
+## 10. Accessibility
 
-**Expected:** Application can be cleanly removed.
+**Expected:** High‑contrast support and keyboard navigation work.
 
-- [ ] Right-click tray icon → Quit
-- [ ] Application exits completely
-- [ ] Delete `Hoppy Whisper-CPU.exe`
-- [ ] Verify registry key removed: `HKCU\...\Run\Hoppy Whisper` (if Start with Windows was enabled)
+- [ ] Enable Windows High Contrast mode.
+- [ ] Verify tray icon remains visible against high‑contrast theme.
+- [ ] Right‑click tray icon.
+- [ ] Navigate the menu using arrow keys.
+- [ ] Press Enter to activate menu items.
+- [ ] Verify all menu items are keyboard accessible.
+
+---
+
+## 11. Cleanup & Uninstall
+
+**Expected:** Application can be removed cleanly.
+
+- [ ] Right‑click tray icon → Quit.
+- [ ] Application exits completely (no lingering processes).
+- [ ] Delete `Hoppy Whisper-CPU.exe`.
+- [ ] If Start with Windows was enabled, verify registry key was removed:
+  - `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Hoppy Whisper`
 - [ ] Optionally delete user data:
   - `%LOCALAPPDATA%\Hoppy Whisper\settings.json`
   - `%LOCALAPPDATA%\Hoppy Whisper\models\`
@@ -249,32 +238,25 @@ Test paste functionality in:
 
 ## Success Criteria
 
-All checklist items must pass for the build to be considered production-ready:
+All of the following must be true for the build to be considered production‑ready:
 
-- ✅ Application launches without errors on clean Windows 11 VM
-- ✅ Models download and cache correctly
-- ✅ Hotkey recording and paste workflow works end-to-end
-- ✅ Smart Cleanup functions correctly (no Shift-bypass)
-- ✅ History and search work with FTS5 queries
-- ✅ Settings persist across restarts
-- ✅ Start with Windows toggle works correctly
-- ✅ Error handling is graceful with clear notifications
-- ✅ Performance meets budgets (GPU: ≤600ms, CPU: ≤1.2s)
-- ✅ Paste works in all tested applications
-- ✅ Accessibility features function as expected
-- ✅ Application can be cleanly removed
+- [ ] Application launches without errors on a clean Windows VM.
+- [ ] Models download and cache correctly.
+- [ ] Hotkey recording and paste workflow works end‑to‑end.
+- [ ] Raw transcriptions are captured without Smart Cleanup.
+- [ ] History and search work with FTS5 queries.
+- [ ] Settings persist across restarts.
+- [ ] Start with Windows toggle works correctly.
+- [ ] Error handling is clear and non‑crashing.
+- [ ] Performance meets targets (GPU ≲ 600 ms, CPU ≲ 1.2 s).
+- [ ] Paste works in all tested applications.
+- [ ] Accessibility features (high contrast, keyboard navigation) function as expected.
+- [ ] Application can be cleanly uninstalled.
 
----
+If any item fails, record:
 
-## Failure Reporting
+1. The checklist item that failed.
+2. Expected behavior.
+3. Actual behavior.
+4. Any error dialogs, logs, or crash dumps.
 
-If any test fails, document:
-
-1. **Test Step:** Which checklist item failed
-2. **Expected Behavior:** What should have happened
-3. **Actual Behavior:** What actually happened
-4. **Error Messages:** Any dialogs, logs, or console output
-5. **System Info:** Windows version, hardware specs
-6. **Reproduction:** Steps to reproduce the failure
-
-Submit failure reports as GitHub issues with the `bug` and `smoke-test` labels.

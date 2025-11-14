@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import threading
 import tkinter as tk
 from tkinter import filedialog, font, messagebox, ttk
 from typing import Callable, Optional
@@ -31,6 +32,9 @@ class HistoryPalette:
         self._results_listbox: Optional[tk.Listbox] = None
         self._status_label: Optional[ttk.Label] = None
         self._current_results: list[Utterance] = []
+        # Background search state
+        self._search_thread: Optional[threading.Thread] = None
+        self._search_cancelled = False
 
     def show(self) -> None:
         """Open the history palette window."""
@@ -156,23 +160,55 @@ class HistoryPalette:
             self._update_status("Error loading history")
 
     def _on_search_change(self, *_: object) -> None:
-        """Handle search text changes."""
+        """Handle search text changes with non-blocking background search."""
         if not self._search_var:
             return
 
         query = self._search_var.get().strip()
+        
+        # Mark any in-flight search as cancelled
+        self._search_cancelled = True
+        
         if not query:
+            # Empty query: just load recent on the main thread
             self._load_recent()
             return
 
-        try:
-            self._current_results = self._dao.search(query, limit=50)
-            self._update_listbox()
-            count = len(self._current_results)
-            self._update_status(f"{count} result{'s' if count != 1 else ''} found")
-        except Exception as exc:
-            LOGGER.error("Search failed: %s", exc)
-            self._update_status("Search error")
+        # Non-empty query: search in background
+        def _background_search() -> None:
+            """Run search in background thread."""
+            try:
+                results = self._dao.search(query, limit=50)
+                # Schedule UI update on main thread
+                if self._root and self._root.winfo_exists() and not self._search_cancelled:
+                    self._root.after(
+                        0,
+                        lambda: self._update_search_results(results, query)
+                    )
+            except Exception as exc:
+                LOGGER.error("Background search failed: %s", exc)
+                if self._root and self._root.winfo_exists():
+                    self._root.after(
+                        0,
+                        lambda: self._update_status("Search error")
+                    )
+
+        # Reset cancellation flag and start new search thread
+        self._search_cancelled = False
+        self._search_thread = threading.Thread(target=_background_search, daemon=True)
+        self._search_thread.start()
+
+    def _update_search_results(self, results: list[Utterance], query: str) -> None:
+        """Update UI with search results. Called on main thread."""
+        if self._search_cancelled or not self._search_var:
+            return
+        # Verify that the query is still the same (in case user typed more)
+        if self._search_var.get().strip() != query:
+            return
+        self._current_results = results
+        self._update_listbox()
+        count = len(results)
+        self._update_status(f"{count} result{'s' if count != 1 else ''} found")
 
     def _update_listbox(self) -> None:
         """Update the listbox with current results."""
@@ -264,13 +300,8 @@ class HistoryPalette:
         self._on_enter()
 
     def _on_export_txt(self) -> None:
-        """Export history to a text file."""
+        """Export history to a text file using streaming to avoid loading all data."""
         try:
-            utterances = self._dao.export_all_to_dict()
-            if not utterances:
-                messagebox.showinfo("Export", "No history to export.")
-                return
-
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             default_name = f"hoppy_whisper_history_{timestamp}.txt"
 
@@ -283,10 +314,12 @@ class HistoryPalette:
             if not file_path:
                 return
 
+            count = 0
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write("Hoppy Whisper Transcription History\n")
                 f.write("=" * 60 + "\n\n")
-                for utt in utterances:
+                for utt in self._dao.iter_utterances(batch_size=500):
+                    count += 1
                     created_utc = utt["created_utc"]
                     if not isinstance(created_utc, (int, float)):
                         msg = f"Expected int/float, got {type(created_utc)}"
@@ -302,16 +335,25 @@ class HistoryPalette:
                         f.write(f"Raw: {utt['raw_text']}\n")
                     f.write("\n" + "-" * 60 + "\n\n")
 
-            msg = f"Exported {len(utterances)} utterances to:\n{file_path}"
+            if count == 0:
+                messagebox.showinfo("Export", "No history to export.")
+                return
+
+            msg = f"Exported {count} utterances to:\n{file_path}"
             messagebox.showinfo("Export Complete", msg)
-            LOGGER.info("Exported %d utterances to %s", len(utterances), file_path)
+            LOGGER.info("Exported %d utterances to %s", count, file_path)
 
         except Exception as exc:
             LOGGER.error("Export to TXT failed: %s", exc)
             messagebox.showerror("Export Failed", f"Failed to export history:\n{exc}")
 
     def _on_export_json(self) -> None:
-        """Export history to a JSON file."""
+        """Export history to a JSON file.
+        
+        Note: For backward compatibility with the JSON format, this loads all
+        utterances into memory as a single list. For very large histories (>10k items),
+        consider using TXT export with streaming instead.
+        """
         try:
             utterances = self._dao.export_all_to_dict()
             if not utterances:

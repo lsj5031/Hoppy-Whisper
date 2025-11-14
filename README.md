@@ -1,6 +1,6 @@
 # Hoppy Whisper Tray App Foundation
 
-Hoppy Whisper is a Windows-native tray application for fast transcription and clipboard automation. This repository currently provides the scaffolding for future development, including a Poetry-managed environment and a modular `src/app` package layout covering tray integration, hotkey handling, audio capture, speech transcription, smart cleanup, and history persistence.
+Hoppy Whisper is a Windows-native tray application for fast transcription and clipboard automation. This repository currently provides the scaffolding for future development, including a Poetry-managed environment and a modular `src/app` package layout covering tray integration, hotkey handling, audio capture, speech transcription, and history persistence.
 
 ## Quick start
 
@@ -17,7 +17,7 @@ Hoppy Whisper is a Windows-native tray application for fast transcription and cl
    ```powershell
    py -3.11 -m poetry check
    ```
-5. **Explore the package layout** under `src/app/` to begin implementing tray, hotkey, audio, transcriber, cleanup, and history features.
+5. **Explore the package layout** under `src/app/` to begin implementing tray, hotkey, audio, transcriber, and history features.
 
 ## Download & Installation
 
@@ -103,13 +103,15 @@ Settings are stored in `%LOCALAPPDATA%\Hoppy Whisper\settings.json` and can be e
   "first_run_complete": false,
   "hotkey_chord": "CTRL+SHIFT+;",
   "paste_window_seconds": 2.0,
-  "start_with_windows": false
+  "start_with_windows": false,
+  "auto_paste": true
 }
 ```
 
 - `hotkey_chord`: Global hotkey combination (e.g., "CTRL+ALT+V")
 - `paste_window_seconds`: Time window for same-hotkey paste (0-5 seconds)
 - `start_with_windows`: Launch at Windows login
+- `auto_paste`: Automatically paste transcription after recording stops
 - `first_run_complete`: Internal flag for first-run notification
 
 **Environment Override:**

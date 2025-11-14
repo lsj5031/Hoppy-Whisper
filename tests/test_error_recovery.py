@@ -216,11 +216,4 @@ def test_model_manager_validates_corrupted_downloads():
         assert "mismatch" in error_msg or "failed" in error_msg
 
 
-def test_cleanup_handles_invalid_mode_gracefully():
-    """Test that invalid cleanup mode falls back to standard."""
-    from app.cleanup import CleanupEngine, CleanupMode
 
-    # Should not crash, should log warning and use standard mode
-    engine = CleanupEngine(CleanupMode.STANDARD)
-    result = engine.clean("hello world")
-    assert isinstance(result, str)
