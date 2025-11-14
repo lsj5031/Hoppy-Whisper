@@ -554,6 +554,47 @@ class AppRuntime:
         self.stop()
 
 
+def _install_global_exception_handlers() -> None:
+    """Log uncaught exceptions from the main thread and background threads."""
+
+    def _handle_uncaught(exc_type, exc_value, exc_traceback) -> None:
+        LOGGER.critical(
+            "Uncaught exception in main thread",
+            exc_info=(exc_type, exc_value, exc_traceback),
+        )
+        try:
+            show_error_dialog(
+                "Hoppy Whisper hit an unexpected error and needs to close. "
+                "Details were written to the log file."
+            )
+        except Exception:
+            # Avoid recursion if dialog/logging fails
+            pass
+
+    sys.excepthook = _handle_uncaught
+
+    # Python 3.11+: capture uncaught exceptions in background threads
+    if hasattr(threading, "excepthook"):
+        original_excepthook = getattr(threading, "excepthook")
+
+        def _thread_excepthook(args) -> None:  # type: ignore[no-redef]
+            LOGGER.critical(
+                "Uncaught exception in thread %s", getattr(args, "thread", None)
+            )
+            LOGGER.critical(
+                "Thread exception details",
+                exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+            )
+            try:
+                if callable(original_excepthook):
+                    original_excepthook(args)
+            except Exception:
+                # Best-effort only; never let this crash the process
+                pass
+
+        threading.excepthook = _thread_excepthook  # type: ignore[assignment]
+
+
 def configure_logging() -> None:
     """Set up logging for console and a rolling log file.
 
@@ -629,6 +670,13 @@ def main() -> int:
             file=sys.stderr,
         )
     configure_logging()
+    _install_global_exception_handlers()
+    LOGGER.info(
+        "Process starting (python=%s, platform=%s, argv=%s)",
+        sys.version.split()[0],
+        sys.platform,
+        " ".join(sys.argv),
+    )
     # Configure SSL certificates early for any upcoming downloads
     _configure_ssl_certs()
     settings = AppSettings.load()

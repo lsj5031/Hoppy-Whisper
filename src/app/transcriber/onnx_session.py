@@ -31,7 +31,12 @@ class OnnxSessionManager:
         self._detect_providers()
 
     def _detect_providers(self) -> None:
-        """Detect available ONNX Runtime providers and prefer DirectML."""
+        """Detect available ONNX Runtime providers and prefer DirectML.
+
+        Environment overrides:
+        - HOPPY_WHISPER_FORCE_CPU=1  -> force CPUExecutionProvider only
+        - HOPPY_WHISPER_DISABLE_DML=1 -> ignore DmlExecutionProvider even if present
+        """
         ensure_ort_dll_search_paths()
         try:
             import onnxruntime as ort
@@ -43,10 +48,24 @@ class OnnxSessionManager:
             self._provider_options = [{}]
             return
 
-        available = ort.get_available_providers()
-        logger.info(f"Available ONNX Runtime providers: {available}")
+        force_cpu_env = os.getenv("HOPPY_WHISPER_FORCE_CPU", "").strip().lower()
+        disable_dml_env = os.getenv("HOPPY_WHISPER_DISABLE_DML", "").strip().lower()
+        force_cpu = force_cpu_env in ("1", "true", "yes", "on")
+        disable_dml = disable_dml_env in ("1", "true", "yes", "on")
 
-        if "DmlExecutionProvider" in available:
+        available = ort.get_available_providers()
+        logger.info("Available ONNX Runtime providers: %s", available)
+
+        if force_cpu:
+            logger.info(
+                "Forcing CPUExecutionProvider due to HOPPY_WHISPER_FORCE_CPU=%s",
+                force_cpu_env,
+            )
+            self._providers = ["CPUExecutionProvider"]
+            self._provider_options = [{}]
+            return
+
+        if "DmlExecutionProvider" in available and not disable_dml:
             logger.info("DirectML provider detected, will use GPU acceleration")
             self._providers = ["DmlExecutionProvider", "CPUExecutionProvider"]
             self._provider_options = [
@@ -54,7 +73,14 @@ class OnnxSessionManager:
                 {},
             ]
         else:
-            logger.info("DirectML not available, using CPU")
+            if "DmlExecutionProvider" in available and disable_dml:
+                logger.info(
+                    "DirectML provider detected but disabled via "
+                    "HOPPY_WHISPER_DISABLE_DML=%s",
+                    disable_dml_env,
+                )
+            else:
+                logger.info("DirectML not available, using CPU")
             self._providers = ["CPUExecutionProvider"]
             self._provider_options = [{}]
 

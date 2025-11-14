@@ -717,32 +717,17 @@ gpu = ["onnxruntime-gpu (>=1.18.1)"]
 hub = ["huggingface-hub"]
 
 [[package]]
-name = "onnxruntime"
-version = "1.23.2"
+name = "onnxruntime-directml"
+version = "1.23.0"
 description = "ONNX Runtime is a runtime accelerator for Machine Learning models"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "onnxruntime-1.23.2-cp310-cp310-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8f7d1fe034090a1e371b7f3ca9d3ccae2fabae8c1d8844fb7371d1ea38e8e8d2"},
-    {file = "onnxruntime-1.23.2-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:4ca88747e708e5c67337b0f65eed4b7d0dd70d22ac332038c9fc4635760018f7"},
-    {file = "onnxruntime-1.23.2-cp311-cp311-macosx_13_0_arm64.whl", hash = "sha256:6f91d2c9b0965e86827a5ba01531d5b669770b01775b23199565d6c1f136616c"},
-    {file = "onnxruntime-1.23.2-cp311-cp311-macosx_13_0_x86_64.whl", hash = "sha256:87d8b6eaf0fbeb6835a60a4265fde7a3b60157cf1b2764773ac47237b4d48612"},
-    {file = "onnxruntime-1.23.2-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:bbfd2fca76c855317568c1b36a885ddea2272c13cb0e395002c402f2360429a6"},
-    {file = "onnxruntime-1.23.2-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:da44b99206e77734c5819aa2142c69e64f3b46edc3bd314f6a45a932defc0b3e"},
-    {file = "onnxruntime-1.23.2-cp311-cp311-win_amd64.whl", hash = "sha256:902c756d8b633ce0dedd889b7c08459433fbcf35e9c38d1c03ddc020f0648c6e"},
-    {file = "onnxruntime-1.23.2-cp312-cp312-macosx_13_0_arm64.whl", hash = "sha256:b8f029a6b98d3cf5be564d52802bb50a8489ab73409fa9db0bf583eabb7c2321"},
-    {file = "onnxruntime-1.23.2-cp312-cp312-macosx_13_0_x86_64.whl", hash = "sha256:218295a8acae83905f6f1aed8cacb8e3eb3bd7513a13fe4ba3b2664a19fc4a6b"},
-    {file = "onnxruntime-1.23.2-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:76ff670550dc23e58ea9bc53b5149b99a44e63b34b524f7b8547469aaa0dcb8c"},
-    {file = "onnxruntime-1.23.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:0f9b4ae77f8e3c9bee50c27bc1beede83f786fe1d52e99ac85aa8d65a01e9b77"},
-    {file = "onnxruntime-1.23.2-cp312-cp312-win_amd64.whl", hash = "sha256:25de5214923ce941a3523739d34a520aac30f21e631de53bba9174dc9c004435"},
-    {file = "onnxruntime-1.23.2-cp313-cp313-macosx_13_0_arm64.whl", hash = "sha256:2ff531ad8496281b4297f32b83b01cdd719617e2351ffe0dba5684fb283afa1f"},
-    {file = "onnxruntime-1.23.2-cp313-cp313-macosx_13_0_x86_64.whl", hash = "sha256:162f4ca894ec3de1a6fd53589e511e06ecdc3ff646849b62a9da7489dee9ce95"},
-    {file = "onnxruntime-1.23.2-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:45d127d6e1e9b99d1ebeae9bcd8f98617a812f53f46699eafeb976275744826b"},
-    {file = "onnxruntime-1.23.2-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8bace4e0d46480fbeeb7bbe1ffe1f080e6663a42d1086ff95c1551f2d39e7872"},
-    {file = "onnxruntime-1.23.2-cp313-cp313-win_amd64.whl", hash = "sha256:1f9cc0a55349c584f083c1c076e611a7c35d5b867d5d6e6d6c823bf821978088"},
-    {file = "onnxruntime-1.23.2-cp313-cp313t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:9d2385e774f46ac38f02b3a91a91e30263d41b2f1f4f26ae34805b2a9ddef466"},
-    {file = "onnxruntime-1.23.2-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e2b9233c4947907fd1818d0e581c049c41ccc39b2856cc942ff6d26317cee145"},
+    {file = "onnxruntime_directml-1.23.0-cp310-cp310-win_amd64.whl", hash = "sha256:184fb5255b544edc2a14e95051f91864ab4dd868425472b54c3f26d2c3b1f456"},
+    {file = "onnxruntime_directml-1.23.0-cp311-cp311-win_amd64.whl", hash = "sha256:87d290a769deededc51ee757770f35a82e52f8765f00880b3a4a2f573a4c6267"},
+    {file = "onnxruntime_directml-1.23.0-cp312-cp312-win_amd64.whl", hash = "sha256:e621e3c0a251f83da338652508d9d68bfb8a1ad6123fc50fed4da9a05b4950bf"},
+    {file = "onnxruntime_directml-1.23.0-cp313-cp313-win_amd64.whl", hash = "sha256:92bc0681f6a01554645f572b5d384dc9d8ca9811c84f1884c27ca6937802a259"},
 ]
 
 [package.dependencies]
@@ -1581,4 +1566,4 @@ dev = ["check-manifest", "memory_profiler", "nose", "psutil", "unittest2", "zest
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "1bea6ee2065a1f11fe8497b203d4755b5baa56893ae1e1726a73a702611430ba"
+content-hash = "31728e0d563baa59d51794192229a62c3059eb270cc18f7c06f1ab3df2dd6f10"
