@@ -1,0 +1,206 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows Executables
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+    env:
+      POETRY_VIRTUALENVS_CREATE: "true"
+      POETRY_VIRTUALENVS_IN_PROJECT: "true"
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          $version = "${{ github.ref }}" -replace 'refs/tags/v', ''
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Version: $version"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+
+      - name: Add Poetry to PATH (Windows)
+        run: |
+          echo "$Env:USERPROFILE\.local\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install VC++ Redistributable
+        run: |
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "vc_redist.x64.exe"
+          Start-Process -FilePath "vc_redist.x64.exe" -ArgumentList "/install /quiet /norestart" -Wait
+          Remove-Item "vc_redist.x64.exe"
+
+      - name: Install dependencies
+        run: poetry install --with dev --no-interaction
+
+      - name: Ruff lint
+        run: poetry run ruff check
+
+      - name: Run tests
+        run: poetry run pytest
+
+      - name: Prefetch models for bundling
+        run: |
+          $code = @'
+          import os, shutil
+          from pathlib import Path
+          from huggingface_hub import hf_hub_download as dl
+          repo = "istupakov/parakeet-tdt-0.6b-v3-onnx"
+          files = [
+              "encoder-model.onnx",
+              "decoder_joint-model.onnx",
+              "vocab.txt",
+              "encoder-model.onnx.data",
+              "nemo128.onnx",
+          ]
+          appdata = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local" / "share"))
+          cache = appdata / "Hoppy Whisper" / "models"
+          cache.mkdir(parents=True, exist_ok=True)
+          for f in files:
+              src = dl(repo_id=repo, filename=f)
+              shutil.copy2(src, cache / f)
+          print("Prefetched models to:", cache)
+          '@
+          Set-Content -Path prefetch_models.py -Value $code
+          poetry run python prefetch_models.py
+
+      - name: Build PyInstaller (CPU)
+        run: |
+          Remove-Item Env:HOPPY_WHISPER_INCLUDE_DML -ErrorAction SilentlyContinue
+          poetry run pyinstaller --noconfirm --clean HoppyWhisper_onefile.spec
+
+      - name: Build PyInstaller (GPU/DirectML)
+        run: |
+          $Env:HOPPY_WHISPER_INCLUDE_DML = "1"
+          poetry run pyinstaller --noconfirm --clean HoppyWhisper_DML_onefile.spec
+
+      - name: Verify build outputs
+        run: |
+          if (-not (Test-Path -Path "dist\Hoppy Whisper-CPU.exe")) { throw "CPU exe not found" }
+          if (-not (Test-Path -Path "dist\Hoppy Whisper-GPU.exe")) { throw "GPU exe not found" }
+
+      - name: Generate checksums
+        id: checksums
+        run: |
+          $hashes = @()
+          Get-ChildItem "dist" -Filter "*.exe" | ForEach-Object {
+            $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash
+            $hashes += "$($hash)  $($_.Name)"
+            Write-Host "$($_.Name): $hash"
+          }
+          $checksumContent = $hashes -join "`n"
+          Set-Content -Path "dist/SHA256SUMS.txt" -Value $checksumContent
+          Write-Host "Checksums file created"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hoppy-whisper-windows-${{ steps.version.outputs.version }}
+          path: dist/*.exe
+          if-no-files-found: error
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums-${{ steps.version.outputs.version }}
+          path: dist/SHA256SUMS.txt
+
+  create-release:
+    name: Create GitHub Release
+    needs: build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Organize artifacts
+        run: |
+          mkdir -p release-files
+          find release-assets -name "*.exe" -exec cp {} release-files/ \;
+          find release-assets -name "SHA256SUMS.txt" -exec cp {} release-files/ \;
+          ls -la release-files/
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION="${{ needs.build-windows.outputs.version }}"
+          NOTES="## Release v${VERSION}
+
+          ### Downloads
+          - **Hoppy Whisper-CPU.exe** - For standard CPUs (recommended for most users)
+          - **Hoppy Whisper-GPU.exe** - For GPUs with DirectML support (optional, faster on compatible hardware)
+
+          ### What's New
+          See the [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+
+          ### Verification
+          To verify the integrity of downloaded files:
+          \`\`\`powershell
+          (Get-FileHash -Path 'Hoppy Whisper-CPU.exe' -Algorithm SHA256).Hash
+          \`\`\`
+          Compare with the hashes in \`SHA256SUMS.txt\`
+
+          ### Installation
+          1. Download the appropriate exe for your system
+          2. Run the installer
+          3. Launch from Windows Start menu or system tray
+
+          ### System Requirements
+          - Windows 10 or later
+          - 2GB RAM minimum (4GB recommended)
+          - Disk space: ~500MB for installation
+          "
+          echo "$NOTES" > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-files/*
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-info
+          path: RELEASE_NOTES.md
