@@ -1,0 +1,138 @@
+name: Bug Report
+description: Report a bug or issue with Hoppy Whisper
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below to help us investigate and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the bug
+      placeholder: Describe what went wrong...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the issue
+      placeholder: |
+        1. Launch Hoppy Whisper
+        2. Press the hotkey (Ctrl+Shift+;)
+        3. Record audio for 5 seconds
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: The transcription should appear in the clipboard...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: The app crashed with error message...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Hoppy Whisper Version
+      description: Which version are you using? (Check tray menu → About, or file properties)
+      placeholder: e.g., 0.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: windows_version
+    attributes:
+      label: Windows Version
+      description: Which version of Windows are you running?
+      options:
+        - Windows 11 (latest)
+        - Windows 11 (older version)
+        - Windows 10 (latest)
+        - Windows 10 (older version)
+        - Other (please specify in additional context)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation_method
+    attributes:
+      label: Installation Method
+      description: How did you install Hoppy Whisper?
+      options:
+        - Downloaded .exe from GitHub Releases
+        - Microsoft Store
+        - Built from source
+        - Other (please specify)
+    validations:
+      required: false
+
+  - type: dropdown
+    id: gpu_type
+    attributes:
+      label: GPU Type (if applicable)
+      description: What GPU do you have? (For performance/DirectML issues)
+      options:
+        - No dedicated GPU (CPU only)
+        - NVIDIA
+        - AMD
+        - Intel integrated
+        - Don't know
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Messages or Logs
+      description: |
+        If applicable, paste any error messages, logs, or screenshots.
+        Check %LOCALAPPDATA%\Hoppy Whisper\ for log files if available.
+      placeholder: Paste error messages here...
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: |
+        Any other information that might help diagnose the issue:
+        - Antivirus software installed
+        - Audio device type (USB, Bluetooth, built-in)
+        - Language settings
+        - Other apps that might conflict
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: troubleshooting
+    attributes:
+      label: Troubleshooting Steps Tried
+      description: Have you tried any of these troubleshooting steps?
+      options:
+        - label: Restarted the application
+        - label: Restarted Windows
+        - label: Tried a different microphone
+        - label: Changed hotkey combination
+        - label: Cleared transcription history
+        - label: Checked Windows microphone/clipboard permissions
+        - label: Reviewed README troubleshooting section
