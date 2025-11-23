@@ -95,7 +95,7 @@ jobs:
 
       - name: Verify build outputs
         run: |
-          if (-not (Test-Path -Path "dist\Hoppy Whisper.exe")) { throw "Executable not found" }
+          if (-not (Test-Path -Path "dist\Hoppy Whisper-CPU.exe")) { throw "Executable not found" }
 
       - name: Generate checksums
         id: checksums
