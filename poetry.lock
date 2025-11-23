@@ -1575,4 +1575,4 @@ dev = ["check-manifest", "memory_profiler", "nose", "psutil", "unittest2", "zest
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "31728e0d563baa59d51794192229a62c3059eb270cc18f7c06f1ab3df2dd6f10"
+content-hash = "27d60aec7e39192410824fe935a1ba3050ad450be615d204e9bc6ef15c4082a1"
