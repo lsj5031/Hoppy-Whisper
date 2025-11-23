@@ -90,20 +90,12 @@ jobs:
           Set-Content -Path prefetch_models.py -Value $code
           poetry run python prefetch_models.py
 
-      - name: Build PyInstaller (CPU)
-        run: |
-          Remove-Item Env:HOPPY_WHISPER_INCLUDE_DML -ErrorAction SilentlyContinue
-          poetry run pyinstaller --noconfirm --clean HoppyWhisper_onefile.spec
-
-      - name: Build PyInstaller (GPU/DirectML)
-        run: |
-          $Env:HOPPY_WHISPER_INCLUDE_DML = "1"
-          poetry run pyinstaller --noconfirm --clean HoppyWhisper_DML_onefile.spec
+      - name: Build PyInstaller
+        run: poetry run pyinstaller --noconfirm --clean HoppyWhisper_onefile.spec
 
       - name: Verify build outputs
         run: |
-          if (-not (Test-Path -Path "dist\Hoppy Whisper-CPU.exe")) { throw "CPU exe not found" }
-          if (-not (Test-Path -Path "dist\Hoppy Whisper-GPU.exe")) { throw "GPU exe not found" }
+          if (-not (Test-Path -Path "dist\Hoppy Whisper.exe")) { throw "Executable not found" }
 
       - name: Generate checksums
         id: checksums
@@ -160,8 +152,7 @@ jobs:
           NOTES="## Release v${VERSION}
 
           ### Downloads
-          - **Hoppy Whisper-CPU.exe** - For standard CPUs (recommended for most users)
-          - **Hoppy Whisper-GPU.exe** - For GPUs with DirectML support (optional, faster on compatible hardware)
+          - **Hoppy Whisper.exe** - Windows transcription application
 
           ### What's New
           See the [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
@@ -194,7 +185,6 @@ jobs:
           body_path: RELEASE_NOTES.md
           draft: false
           prerelease: false
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
