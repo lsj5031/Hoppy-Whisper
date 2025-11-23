@@ -1,6 +1,6 @@
 # Hoppy Whisper Tray App Foundation
 
-Hoppy Whisper is a Windows-native tray application for fast transcription and clipboard automation. This repository currently provides the scaffolding for future development, including a Poetry-managed environment and a modular `src/app` package layout covering tray integration, hotkey handling, audio capture, speech transcription, and history persistence.
+Hoppy Whisper is a Windows-native tray application for fast speech transcription and clipboard automation. Built with ONNX Runtime and WebRTC VAD for on-device processing, it captures audio via a global hotkey, transcribes locally, and pastes results into any application—no cloud services, no telemetry.
 
 ## Quick start
 
@@ -17,14 +17,18 @@ Hoppy Whisper is a Windows-native tray application for fast transcription and cl
    ```powershell
    py -3.11 -m poetry check
    ```
-5. **Explore the package layout** under `src/app/` to begin implementing tray, hotkey, audio, transcriber, and history features.
+5. **Run tests and verify setup:**
+    ```powershell
+    poetry run pytest
+    poetry run ruff check src/
+    ```
 
 ## Download & Installation
 
 ### For End Users
 
 1. **Download the latest release:**
-   - Go to [Releases](https://github.com/lsj5031/parakeet/releases/latest)
+   - Go to [Releases](https://github.com/lsj5031/Hoppy-Whisper/releases/latest)
    - Download `Hoppy Whisper-CPU.exe`
 
 2. **Extract and run:**
@@ -52,7 +56,7 @@ See [Development Setup](#quick-start) below.
 
 ## CI and Releases
 
-- **Windows CI** runs on pull requests targeting `main`, pushes to `main`, and tags matching `v*`
+- **Windows CI** runs on push events to `master`, and tags matching `v*`
 - The workflow installs Poetry, runs Ruff linting, executes pytest, and builds a single-file PyInstaller executable
 - The release attaches `Hoppy Whisper-CPU.exe` as an artifact
 - **Tag pushes** that match `v*` automatically create a GitHub Release with the zip attached and auto-generated release notes
@@ -67,12 +71,13 @@ To publish a new release:
    ```
 
 2. **Commit and tag:**
-   ```bash
-   git add pyproject.toml
-   git commit -m "Bump version to 0.2.0"
-   git tag v0.2.0
-   git push origin master --tags
-   ```
+    ```powershell
+    git add pyproject.toml
+    git commit -m "Bump version to 0.2.0"
+    git tag v0.2.0
+    git push origin master
+    git push origin v0.2.0
+    ```
 
 3. **GitHub Actions** will automatically:
    - Build the PyInstaller executable
