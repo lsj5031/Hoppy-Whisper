@@ -34,7 +34,6 @@ poetry run pyinstaller --noconfirm --clean HoppyWhisper.spec
   - `transcriber/` - ONNX speech recognition + model manager (Hugging Face hub)
   - `tray/` - Tray icon, menu, state management (pystray)
   - `history/` - SQLite persistence and search UI (90-day retention)
-  - `cleanup/` - Text post-processing engine
   - `settings.py` - JSON config + paths (`%LOCALAPPDATA%\Hoppy Whisper\`)
   - `metrics.py` - Optional telemetry (opt-in, local-only)
   - `startup.py` - Windows registry startup integration

@@ -49,9 +49,7 @@ Hoppy Whisper is a Windows-native tray application for fast speech transcription
 **Download and install the latest release:**
 
 1. Go to [Releases](https://github.com/lsj5031/Hoppy-Whisper/releases/latest)
-2. Choose your variant:
-   - **`Hoppy Whisper-CPU.exe`** - Default, works on all systems (CPU-based inference)
-   - **`Hoppy Whisper-GPU.exe`** - GPU-accelerated with DirectML (requires DirectX 12 compatible GPU)
+2. Download **`Hoppy Whisper-CPU.exe`** (CPU-based inference, works on all systems)
 3. Extract and run the `.exe` file - the app will appear in your system tray
 
 **System Requirements:**
@@ -62,9 +60,10 @@ Hoppy Whisper is a Windows-native tray application for fast speech transcription
 - Internet connection for first-run model download
 
 **GPU Acceleration (Optional):**
+- The CPU executable automatically detects and uses DirectML GPU acceleration if available
 - Requires DirectX 12 compatible GPU (NVIDIA, AMD, Intel, or Qualcomm)
-- Download `Hoppy Whisper-GPU.exe` for automatic GPU acceleration
-- Falls back to CPU if no GPU is detected
+- If no GPU is detected, falls back seamlessly to CPU inference
+- No separate GPU executable needed; one build works for all hardware
 
 **First-run setup:**
 - A notification will explain the default hotkey (`Ctrl+Shift+;`)
@@ -86,29 +85,22 @@ Hoppy Whisper is a Windows-native tray application for fast speech transcription
    poetry run ruff check src/
    ```
 
-3. **Build CPU variant (default):**
-   ```powershell
-   poetry run pyinstaller --noconfirm --clean HoppyWhisper.spec
-   ```
-   Output: `dist\Hoppy Whisper\Hoppy Whisper.exe` (~20 MB)
+3. **Build the executable:**
+    ```powershell
+    poetry run pyinstaller --noconfirm --clean HoppyWhisper_onefile.spec
+    ```
+    Output: `dist\Hoppy Whisper-CPU.exe` (~20 MB without bundled models)
 
-4. **Build GPU variant with DirectML support:**
-   ```powershell
-   $Env:HOPPY_WHISPER_INCLUDE_DML = "1"
-   poetry run pyinstaller --noconfirm --clean HoppyWhisper.spec
-   ```
-   Output: `dist\Hoppy Whisper\Hoppy Whisper.exe` (~57 MB, includes models + GPU support)
-
-5. **Test the build:**
-   ```powershell
-   .\dist\Hoppy Whisper\Hoppy Whisper.exe
-   ```
+4. **Test the build:**
+    ```powershell
+    .\dist\Hoppy Whisper-CPU.exe
+    ```
 
 **Build Notes:**
-- Models (670 MB) are bundled in the executable by default if found in `%LOCALAPPDATA%\Hoppy Whisper\models\`
-- Without bundled models, the app downloads them on first launch
-- CPU variant uses DirectML fallback if GPU unavailable
-- GPU variant includes full DirectML runtime support
+- The single executable automatically detects and uses DirectML GPU acceleration if available
+- Models (~500 MB) download automatically on first launch from Hugging Face
+- To pre-bundle models into the executable, place them in `%LOCALAPPDATA%\Hoppy Whisper\models\` before building
+- With bundled models, the executable is ~57 MB; without them, it's ~20 MB
 
 ## CI and Releases
 
@@ -161,11 +153,13 @@ Settings are stored in `%LOCALAPPDATA%\Hoppy Whisper\settings.json` and can be e
 
 ```json
 {
+  "auto_paste": true,
   "first_run_complete": false,
+  "history_retention_days": 90,
   "hotkey_chord": "CTRL+SHIFT+;",
   "paste_window_seconds": 2.0,
   "start_with_windows": false,
-  "auto_paste": true
+  "telemetry_enabled": false
 }
 ```
 
@@ -173,6 +167,8 @@ Settings are stored in `%LOCALAPPDATA%\Hoppy Whisper\settings.json` and can be e
 - `paste_window_seconds`: Time window for same-hotkey paste (0-5 seconds)
 - `start_with_windows`: Launch at Windows login
 - `auto_paste`: Automatically paste transcription after recording stops
+- `history_retention_days`: Days to retain transcription history (0 = no limit, must manually clear)
+- `telemetry_enabled`: Enable local-only performance metrics logging
 - `first_run_complete`: Internal flag for first-run notification
 
 **Environment Override:**
@@ -207,7 +203,7 @@ Hoppy Whisper is designed to be accessible:
 - **Keyboard navigation**: All tray menu items are keyboard-accessible (navigate with arrow keys, activate with Enter)
 - **Screen reader friendly**: Menu items have descriptive labels for assistive technologies
 - **Multiple icon sizes**: Supports various DPI scaling levels (16px to 64px)
-- **Local storage**: Transcription history is stored in a local SQLite database at `%LOCALAPPDATA%\Hoppy Whisper\history.db` with a default 90-day retention period.
+- **Local storage**: Transcription history is stored in a local SQLite database at `%LOCALAPPDATA%\Hoppy Whisper\history.db`. Retention is configurable (default 90 days).
 - **Export & deletion**: You can export your history to `.txt` or `.json` files via the History palette, or clear all stored utterances at any time with a confirmation dialog.
 
 **Required permissions:**
@@ -221,13 +217,19 @@ All data remains under your control on your device.
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+Shift+;` | **Record & Transcribe** (default hotkey)<br>- Press & hold to start recording<br>- Release to stop and transcribe<br>- Press again within 2s to paste |
-| `Win+Shift+Y` | **Open History Palette** - search and reuse past transcriptions |
+| `Ctrl+Shift+;` | **Record & Transcribe** (default hotkey, customizable)<br>- Press & hold to start recording<br>- Release to stop and transcribe<br>- Press again within 2s to paste |
+| **Tray menu** | Click **History** to open the History Palette |
 | `Enter` (in History) | Copy selected item to clipboard |
 | `Shift+Enter` (in History) | Copy and paste selected item |
 | `Esc` (in History) | Close History Palette |
+| `↑/↓` (in History) | Navigate through search results |
 
-**Note:** The main hotkey can be customized in `settings.json` (e.g., `"hotkey_chord": "CTRL+ALT+V"`).
+**Customizing the hotkey:**
+Edit `settings.json` to change the hotkey:
+- Location: `%LOCALAPPDATA%\Hoppy Whisper\settings.json`
+- Examples: `"CTRL+ALT+V"`, `"WIN+SHIFT+C"`, `"F12"`, etc.
+- Supported modifiers: CTRL, SHIFT, ALT, WIN
+- Supported keys: A-Z, 0-9, F1-F24, and punctuation keys (`;`, `,`, `.`, etc.).
 
 ## Known Limitations
 
@@ -247,7 +249,7 @@ All data remains under your control on your device.
 
 - **No undo:** Once transcription is pasted, there's no built-in undo. Use your application's undo feature (`Ctrl+Z`).
 
-- **History retention:** Default 90-day retention for transcription history. Older entries are automatically purged. Export important transcriptions if needed.
+- **History retention:** Transcription history retention is configurable in `settings.json` (default 90 days). To delete old entries manually, use the "Clear History" button in the History palette. Export important transcriptions if needed.
 
 ## Troubleshooting
 
