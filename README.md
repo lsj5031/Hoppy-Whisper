@@ -42,23 +42,17 @@ Hoppy Whisper is a Windows-native tray application for fast speech transcription
     poetry run ruff check src/
     ```
 
-## Download & Installation
+## Building from Source
 
 ### For End Users
 
-1. **Download the latest release:**
-   - Go to [Releases](https://github.com/lsj5031/Hoppy-Whisper/releases/latest)
-   - Download `Hoppy Whisper-CPU.exe`
+**Download and install the latest release:**
 
-2. **Extract and run:**
-   - Place the executable in a folder of your choice
-   - Double-click `Hoppy Whisper-CPU.exe` to launch
-   - The app will appear in your system tray
-
-3. **First-run setup:**
-   - A notification will explain the default hotkey (`Ctrl+Shift+;`)
-   - On first transcription, models (~500MB) will download automatically from Hugging Face
-   - Models are cached locally in `%LOCALAPPDATA%\Hoppy Whisper\models\`
+1. Go to [Releases](https://github.com/lsj5031/Hoppy-Whisper/releases/latest)
+2. Choose your variant:
+   - **`Hoppy Whisper-CPU.exe`** - Default, works on all systems (CPU-based inference)
+   - **`Hoppy Whisper-GPU.exe`** - GPU-accelerated with DirectML (requires DirectX 12 compatible GPU)
+3. Extract and run the `.exe` file - the app will appear in your system tray
 
 **System Requirements:**
 - Windows 10 (64-bit) or Windows 11
@@ -67,11 +61,54 @@ Hoppy Whisper is a Windows-native tray application for fast speech transcription
 - Microphone access
 - Internet connection for first-run model download
 
-**Optional:** GPU acceleration requires DirectX 12 compatible GPU (NVIDIA, AMD, or Intel)
+**GPU Acceleration (Optional):**
+- Requires DirectX 12 compatible GPU (NVIDIA, AMD, Intel, or Qualcomm)
+- Download `Hoppy Whisper-GPU.exe` for automatic GPU acceleration
+- Falls back to CPU if no GPU is detected
+
+**First-run setup:**
+- A notification will explain the default hotkey (`Ctrl+Shift+;`)
+- On first transcription, models (~500MB) will download automatically from Hugging Face
+- Models are cached locally in `%LOCALAPPDATA%\Hoppy Whisper\models\`
 
 ### For Developers
 
-See [Development Setup](#quick-start) below.
+**Build from source locally:**
+
+1. **Install dependencies:**
+   ```powershell
+   py -3.11 -m poetry install --with dev
+   ```
+
+2. **Run tests and linting:**
+   ```powershell
+   poetry run pytest
+   poetry run ruff check src/
+   ```
+
+3. **Build CPU variant (default):**
+   ```powershell
+   poetry run pyinstaller --noconfirm --clean HoppyWhisper.spec
+   ```
+   Output: `dist\Hoppy Whisper\Hoppy Whisper.exe` (~20 MB)
+
+4. **Build GPU variant with DirectML support:**
+   ```powershell
+   $Env:HOPPY_WHISPER_INCLUDE_DML = "1"
+   poetry run pyinstaller --noconfirm --clean HoppyWhisper.spec
+   ```
+   Output: `dist\Hoppy Whisper\Hoppy Whisper.exe` (~57 MB, includes models + GPU support)
+
+5. **Test the build:**
+   ```powershell
+   .\dist\Hoppy Whisper\Hoppy Whisper.exe
+   ```
+
+**Build Notes:**
+- Models (670 MB) are bundled in the executable by default if found in `%LOCALAPPDATA%\Hoppy Whisper\models\`
+- Without bundled models, the app downloads them on first launch
+- CPU variant uses DirectML fallback if GPU unavailable
+- GPU variant includes full DirectML runtime support
 
 ## CI and Releases
 
