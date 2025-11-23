@@ -1,6 +1,25 @@
-# Hoppy Whisper Tray App Foundation
+<div align="center">
+
+# 🐰 Hoppy Whisper
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="icos/BunnyTranscribing1.ico">
+  <img alt="Hoppy Whisper - Cute bunny transcription app" src="icos/BunnyStandby.ico" width="128" height="128">
+</picture>
 
 Hoppy Whisper is a Windows-native tray application for fast speech transcription and clipboard automation. Built with ONNX Runtime and WebRTC VAD for on-device processing, it captures audio via a global hotkey, transcribes locally, and pastes results into any application—no cloud services, no telemetry.
+
+</div>
+
+## Features
+
+- 🎤 **Record with a hotkey** - Press & hold `Ctrl+Shift+;` to start recording
+- ✨ **Instant transcription** - ONNX-powered speech-to-text in seconds
+- 📋 **Auto-paste** - Transcription automatically pastes into your active window
+- 🔐 **100% private** - All processing happens on your machine, no cloud services
+- 🔇 **Smart noise filtering** - WebRTC VAD eliminates background noise
+- 💾 **Local history** - Search past transcriptions (90-day retention)
+- ⚡ **GPU accelerated** - Optional DirectML support for compatible hardware
 
 ## Quick start
 
