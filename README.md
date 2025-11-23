@@ -24,7 +24,7 @@ Hoppy Whisper is a Windows-native tray application for fast transcription and cl
 ### For End Users
 
 1. **Download the latest release:**
-   - Go to [Releases](https://github.com/YOUR_USERNAME/Hoppy-Whisper/releases/latest)
+   - Go to [Releases](https://github.com/lsj5031/parakeet/releases/latest)
    - Download `Hoppy Whisper-CPU.exe`
 
 2. **Extract and run:**

@@ -2,7 +2,7 @@
 name = "hoppy-whisper"
 version = "0.1.0"
 description = "Windows tray transcription tray app foundation"
-authors = [{ name = "hoppy whisper Contributors", email = "maintainers@hoppy.app" }]
+authors = [{ name = "hoppy whisper Contributors", email = "lsj5031@gmail.com" }]
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11,<4.0"
