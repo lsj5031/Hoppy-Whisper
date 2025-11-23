@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Dict, List
+from typing import Callable
 
 import pytest
 from pynput import keyboard
@@ -38,7 +38,7 @@ def test_dispatch_handler_error_is_logged(
         on_error=on_error,
     )
 
-    pressed: Dict[str, Callable[[keyboard.Key | keyboard.KeyCode], None]] = {}
+    pressed: dict[str, Callable[[keyboard.Key | keyboard.KeyCode], None]] = {}
 
     class StubListener:
         def __init__(
@@ -67,7 +67,6 @@ def test_dispatch_handler_error_is_logged(
 
     # Simulate hotkey press
     press = pressed["press"]
-    release = pressed["release"]
 
     ctrl = keyboard.KeyCode.from_vk(0xA2)
     shift = keyboard.KeyCode.from_vk(0xA0)
@@ -78,6 +77,7 @@ def test_dispatch_handler_error_is_logged(
     press(semicolon)
 
     # Verify handler was called
+
     assert handler_called
     # Verify on_error was also called
     assert on_error_called
@@ -106,7 +106,7 @@ def test_dispatch_on_error_callback_also_fails(
         on_error=failing_on_error,
     )
 
-    pressed: Dict[str, Callable[[keyboard.Key | keyboard.KeyCode], None]] = {}
+    pressed: dict[str, Callable[[keyboard.Key | keyboard.KeyCode], None]] = {}
 
     class StubListener:
         def __init__(
@@ -151,6 +151,7 @@ def test_dispatch_on_error_callback_also_fails(
 
 def test_dispatch_does_not_reraise() -> None:
     """_dispatch does not re-raise exceptions."""
+
     def failing_handler() -> None:
         raise ValueError("Test error")
 

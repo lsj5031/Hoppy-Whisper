@@ -252,10 +252,9 @@ class HotkeyManager:
 
     def _dispatch(self, handler: Callable[[], None]) -> None:
         """Dispatch a callback, ensuring errors are always logged.
-        
+
         Logs any exception from the handler, then attempts to call the on_error
-        callback. If the on_error callback also raises, that error is logged too
-        (double-logging is preferable to silently swallowing errors).
+        callback. If the on_error callback also raises, that error is logged too.
         """
         try:
             handler()
@@ -268,7 +267,6 @@ class HotkeyManager:
             except Exception as err:
                 # Log if on_error callback itself fails
                 LOGGER.exception("Error callback also failed", exc_info=err)
-
 
 
 def _vk_from_key(key: keyboard.Key | keyboard.KeyCode) -> Optional[int]:

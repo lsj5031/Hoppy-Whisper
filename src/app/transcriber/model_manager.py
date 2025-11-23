@@ -15,6 +15,7 @@ from typing import Any
 def urlopen(*args, **kwargs):  # type: ignore[override]
     return urllib.request.urlopen(*args, **kwargs)
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -273,6 +274,7 @@ class ModelManager:
         Raises:
             RuntimeError: If any model fails to download
         """
+
         def _resolve(asset: ModelAsset, tag: str) -> Path:
             bundled = self._bundled_model_path(asset)
             if bundled is not None:

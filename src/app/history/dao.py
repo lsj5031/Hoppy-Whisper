@@ -177,8 +177,8 @@ class HistoryDAO:
 
     def iter_utterances(self, batch_size: int = 1000) -> Iterator[dict[str, object]]:
         """Stream utterances in batches using LIMIT/OFFSET pagination.
-        
-        Yields dictionaries with keys: id, text, created_utc, duration_ms, mode, raw_text.
+
+        Yields dicts: id, text, created_utc, duration_ms, mode, raw_text.
         Uses RLock to ensure safe concurrent access.
         """
         offset = 0
@@ -186,7 +186,7 @@ class HistoryDAO:
             with self._lock:
                 if not self._conn:
                     raise RuntimeError("Database not opened")
-                
+
                 cursor = self._conn.cursor()
                 cursor.execute(
                     """
@@ -198,10 +198,10 @@ class HistoryDAO:
                     (batch_size, offset),
                 )
                 rows = cursor.fetchall()
-            
+
             if not rows:
                 break
-            
+
             for row in rows:
                 yield {
                     "id": row["id"],
@@ -211,12 +211,12 @@ class HistoryDAO:
                     "mode": row["mode"],
                     "raw_text": row["raw_text"],
                 }
-            
+
             offset += batch_size
 
     def export_all_to_dict(self) -> list[dict[str, object]]:
         """Export all utterances as a list of dictionaries.
-        
+
         Uses iter_utterances internally for memory efficiency.
         """
         return list(self.iter_utterances(batch_size=1000))

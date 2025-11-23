@@ -132,9 +132,7 @@ class TempWavFile:
     def __enter__(self) -> Path:
         """Create and write the temporary WAV file."""
         # Create temp file with a file descriptor to prevent race conditions
-        self._fd, temp_path = tempfile.mkstemp(
-            prefix=self._prefix, suffix=self._suffix
-        )
+        self._fd, temp_path = tempfile.mkstemp(prefix=self._prefix, suffix=self._suffix)
 
         try:
             self._file_path = Path(temp_path)

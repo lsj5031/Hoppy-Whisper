@@ -21,9 +21,10 @@ def test_audio_device_missing_raises_clear_error():
         with pytest.raises(AudioDeviceError) as exc_info:
             recorder.start()
 
-        assert "microphone" in str(exc_info.value).lower() or "input device" in str(
-            exc_info.value
-        ).lower()
+        assert (
+            "microphone" in str(exc_info.value).lower()
+            or "input device" in str(exc_info.value).lower()
+        )
 
     finally:
         sd.default.device = original_default
@@ -157,17 +158,17 @@ def test_audio_recorder_handles_repeated_start_calls():
 
     # Mock sounddevice to simulate a working device
     fake_device = {
-        'name': 'Test Device',
-        'max_input_channels': 2,
-        'default_samplerate': 16000
+        "name": "Test Device",
+        "max_input_channels": 2,
+        "default_samplerate": 16000,
     }
 
     original_default = sd.default.device
 
     try:
-        with patch('sounddevice.query_devices') as mock_query:
+        with patch("sounddevice.query_devices") as mock_query:
             mock_query.return_value = [fake_device]
-            with patch('sounddevice.InputStream') as mock_stream:
+            with patch("sounddevice.InputStream") as mock_stream:
                 # Mock the stream to avoid actual audio capture
                 mock_instance = MagicMock()
                 mock_stream.return_value = mock_instance
@@ -214,6 +215,3 @@ def test_model_manager_validates_corrupted_downloads():
         # Should mention hash or size mismatch
         error_msg = str(exc_info.value).lower()
         assert "mismatch" in error_msg or "failed" in error_msg
-
-
-

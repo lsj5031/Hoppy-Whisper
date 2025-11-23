@@ -34,7 +34,7 @@ class AppSettings:
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "AppSettings":
         """Create a settings instance from a dictionary payload.
-        
+
         Ignores unknown keys to ensure backward compatibility with
         older settings.json files that may contain cleanup_mode, cleanup_enabled, etc.
         """

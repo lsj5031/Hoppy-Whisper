@@ -84,9 +84,7 @@ class TrayController:
             return
         menu = self._build_menu()
         image = self._icon_factory.frame(self._state, self._theme, self._display_size)
-        icon = pystray.Icon(
-            self._app_name, icon=image, title=self._app_name, menu=menu
-        )
+        icon = pystray.Icon(self._app_name, icon=image, title=self._app_name, menu=menu)
         self._icon = icon
         if self._show_first_run_tip:
             # Notify after the icon is visible to avoid lost toasts.

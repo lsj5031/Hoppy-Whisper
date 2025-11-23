@@ -167,7 +167,7 @@ def test_iter_utterances_single_batch(dao: HistoryDAO) -> None:
     # Verify all three IDs are present
     ids = [item["id"] for item in result]
     assert set(ids) == {id1, id2, id3}
-    
+
     # Verify structure of each item
     for item in result:
         assert "id" in item
@@ -202,7 +202,7 @@ def test_iter_utterances_consistency_with_export_all(dao: HistoryDAO) -> None:
     export_result = dao.export_all_to_dict()
 
     assert len(iter_result) == len(export_result)
-    
+
     # Compare sorted IDs to ensure same items
     iter_ids = sorted([item["id"] for item in iter_result])
     export_ids = sorted([item["id"] for item in export_result])

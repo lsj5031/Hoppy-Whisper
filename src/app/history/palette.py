@@ -165,10 +165,10 @@ class HistoryPalette:
             return
 
         query = self._search_var.get().strip()
-        
+
         # Mark any in-flight search as cancelled
         self._search_cancelled = True
-        
+
         if not query:
             # Empty query: just load recent on the main thread
             self._load_recent()
@@ -180,18 +180,18 @@ class HistoryPalette:
             try:
                 results = self._dao.search(query, limit=50)
                 # Schedule UI update on main thread
-                if self._root and self._root.winfo_exists() and not self._search_cancelled:
+                if (
+                    self._root
+                    and self._root.winfo_exists()
+                    and not self._search_cancelled
+                ):
                     self._root.after(
-                        0,
-                        lambda: self._update_search_results(results, query)
+                        0, lambda: self._update_search_results(results, query)
                     )
             except Exception as exc:
                 LOGGER.error("Background search failed: %s", exc)
                 if self._root and self._root.winfo_exists():
-                    self._root.after(
-                        0,
-                        lambda: self._update_status("Search error")
-                    )
+                    self._root.after(0, lambda: self._update_status("Search error"))
 
         # Reset cancellation flag and start new search thread
         self._search_cancelled = False
@@ -349,7 +349,7 @@ class HistoryPalette:
 
     def _on_export_json(self) -> None:
         """Export history to a JSON file.
-        
+
         Note: For backward compatibility with the JSON format, this loads all
         utterances into memory as a single list. For very large histories (>10k items),
         consider using TXT export with streaming instead.

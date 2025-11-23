@@ -131,6 +131,7 @@ class AppRuntime:
             import os
             import subprocess
             import sys
+
             if sys.platform == "win32":
                 subprocess.Popen(["notepad.exe", str(path)])
             else:
@@ -380,6 +381,7 @@ class AppRuntime:
             # Small delay to ensure context switch
             import sys
             import time
+
             predelay = self._settings.paste_predelay_ms / 1000.0
             time.sleep(predelay)
 
@@ -470,7 +472,7 @@ class AppRuntime:
 
     def _schedule_idle_reset(self, delay: float | None = None) -> None:
         """Schedule a return to idle state after a delay.
-        
+
         If delay is None, uses the value from settings (idle_reset_delay_ms).
         """
         self._cancel_timer(self._idle_timer)
@@ -526,6 +528,7 @@ class AppRuntime:
         """Restart the application by spawning a new instance and exiting."""
         try:
             import subprocess
+
             subprocess.Popen(self._startup_command, shell=True)
             self._notify("Restart", "Restarting Hoppy Whisper...")
         except Exception as exc:
@@ -557,7 +560,7 @@ def _install_global_exception_handlers() -> None:
 
     # Python 3.11+: capture uncaught exceptions in background threads
     if hasattr(threading, "excepthook"):
-        original_excepthook = getattr(threading, "excepthook")
+        original_excepthook = threading.excepthook  # noqa: F841
 
         def _thread_excepthook(args) -> None:  # type: ignore[no-redef]
             LOGGER.critical(
@@ -581,7 +584,7 @@ def configure_logging() -> None:
     """Set up logging for console and a rolling log file.
 
     - Console level can be overridden via HOPPY_WHISPER_LOG_LEVEL (e.g., DEBUG/INFO).
-    - Detailed DEBUG logs are always written to %LOCALAPPDATA%/Hoppy Whisper/hoppy_whisper.log.
+    - Detailed DEBUG logs are always written to Hoppy Whisper dir/hoppy_whisper.log.
     """
     level_name = os.getenv("HOPPY_WHISPER_LOG_LEVEL", "INFO").upper()
     console_level = getattr(logging, level_name, logging.INFO)
@@ -599,6 +602,7 @@ def configure_logging() -> None:
     # File handler (rolling)
     try:
         from logging.handlers import RotatingFileHandler
+
         log_path = default_metrics_log_path().with_name("hoppy_whisper.log")
         log_path.parent.mkdir(parents=True, exist_ok=True)
         fh = RotatingFileHandler(

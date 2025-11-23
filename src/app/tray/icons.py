@@ -56,14 +56,15 @@ class TrayIconFactory:
         if self._icons_dir:
             self._idle_icon = _optional_file(self._icons_dir, "BunnyStandby.ico")
             # Prefer a specific listening icon; fall back to standby if absent
-            self._listening_icon = (
-                _optional_file(self._icons_dir, "BunnyStandby.ico")
-                or _optional_file(self._icons_dir, "BunnyPause.ico")
-            )
+            self._listening_icon = _optional_file(
+                self._icons_dir, "BunnyStandby.ico"
+            ) or _optional_file(self._icons_dir, "BunnyPause.ico")
             self._listening_frames = _listening_frame_files(self._icons_dir)
             self._transcribing_frames = _transcribing_frame_files(self._icons_dir)
 
-        detected_frames = max(len(self._listening_frames), len(self._transcribing_frames))
+        num_listening = len(self._listening_frames)
+        num_transcribing = len(self._transcribing_frames)
+        detected_frames = max(num_listening, num_transcribing)
         if spinner_frames is not None:
             self._spinner_frames = spinner_frames
         else:
@@ -119,14 +120,22 @@ class TrayIconFactory:
         specific assets are missing to keep the tray responsive.
         """
         # Listening animation frames (animate while recording)
-        if self._icons_dir and key.state is TrayState.LISTENING and self._listening_frames:
+        if (
+            self._icons_dir
+            and key.state is TrayState.LISTENING
+            and self._listening_frames
+        ):
             idx = key.frame % len(self._listening_frames)
             img = _open_ico_scaled(self._listening_frames[idx], key.size)
             if img is not None:
                 return img
 
         # Transcribing animation frames (animate while processing)
-        if self._icons_dir and key.state is TrayState.TRANSCRIBING and self._transcribing_frames:
+        if (
+            self._icons_dir
+            and key.state is TrayState.TRANSCRIBING
+            and self._transcribing_frames
+        ):
             idx = key.frame % len(self._transcribing_frames)
             img = _open_ico_scaled(self._transcribing_frames[idx], key.size)
             if img is not None:
@@ -142,7 +151,11 @@ class TrayIconFactory:
             elif key.state is TrayState.TRANSCRIBING:
                 candidate = self._idle_icon or self._listening_icon
             elif key.state is TrayState.ERROR:
-                candidate = _optional_file(self._icons_dir, "BunnyPause.ico") or self._idle_icon or self._listening_icon
+                candidate = (
+                    _optional_file(self._icons_dir, "BunnyPause.ico")
+                    or self._idle_icon
+                    or self._listening_icon
+                )
             if candidate:
                 img = _open_ico_scaled(candidate, key.size)
                 if img is not None:
@@ -156,13 +169,14 @@ class TrayIconFactory:
 # Bunny ICO asset helpers
 # ---------------------------------------------------------------------------
 
+
 def _resolve_icons_dir() -> Optional[Path]:
     """Locate the icos directory with bunny assets if present.
 
     Order:
     1) HOPPY_WHISPER_ICONS_DIR env var
     2) PyInstaller bundle dir (sys._MEIPASS)/icos
-    3) Search upward from this file for a folder named "icos" containing BunnyStandby.ico
+    3) Search upward from this file for a folder named "icos"
     """
     import os
     import sys
@@ -193,12 +207,16 @@ def _optional_file(folder: Path, name: str) -> Optional[Path]:
 
 
 def _listening_frame_files(folder: Path) -> List[Path]:
-    files = sorted(folder.glob('BunnyListening*.ico'), key=lambda p: _suffix_number(p.name))
+    files = sorted(
+        folder.glob("BunnyListening*.ico"), key=lambda p: _suffix_number(p.name)
+    )
     return [p for p in files if p.exists()]
 
 
 def _transcribing_frame_files(folder: Path) -> List[Path]:
-    files = sorted(folder.glob('BunnyTranscribing*.ico'), key=lambda p: _suffix_number(p.name))
+    files = sorted(
+        folder.glob("BunnyTranscribing*.ico"), key=lambda p: _suffix_number(p.name)
+    )
     return [p for p in files if p.exists()]
 
 

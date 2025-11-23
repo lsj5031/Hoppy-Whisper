@@ -65,6 +65,7 @@ class HoppyTranscriber:
         # Ensure ORT DLL directories are available in frozen mode before imports
         try:
             from .onnx_session import ensure_ort_dll_search_paths
+
             ensure_ort_dll_search_paths()
         except Exception:
             pass

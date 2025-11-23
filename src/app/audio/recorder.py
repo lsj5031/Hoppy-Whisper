@@ -91,7 +91,7 @@ class AudioRecorder:
                         b = int(getattr(dp, "output", -9999))
                     except Exception:
                         pass
-                explicit_invalid = (a == -1 and b == -1)
+                explicit_invalid = a == -1 and b == -1
             except Exception:
                 explicit_invalid = False
 
@@ -116,6 +116,7 @@ class AudioRecorder:
             in_pytest = False
             try:
                 import sys
+
                 in_pytest = "pytest" in sys.modules
             except Exception:
                 pass

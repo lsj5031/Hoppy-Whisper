@@ -1,8 +1,12 @@
 """Speech-to-text transcription utilities."""
 
-from .model_manager import ModelAsset, ModelManager, ModelManifest, get_model_manager
-from .onnx_session import OnnxSessionManager, ProviderInfo, get_session_manager
 from .hoppy import HoppyTranscriber, TranscriptionResult, get_transcriber
+from .model_manager import ModelAsset, ModelManager, ModelManifest, get_model_manager
+from .onnx_session import (
+    OnnxSessionManager,
+    ProviderInfo,
+    get_session_manager,
+)
 
 __all__ = [
     "OnnxSessionManager",
