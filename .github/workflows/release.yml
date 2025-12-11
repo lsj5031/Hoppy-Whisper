@@ -65,43 +65,18 @@ jobs:
       - name: Run tests
         run: poetry run pytest
 
-      - name: Prefetch models for bundling
-        run: |
-          $code = @'
-          import os, shutil
-          from pathlib import Path
-          from huggingface_hub import hf_hub_download as dl
-          repo = "istupakov/parakeet-tdt-0.6b-v3-onnx"
-          files = [
-              "encoder-model.onnx",
-              "decoder_joint-model.onnx",
-              "vocab.txt",
-              "encoder-model.onnx.data",
-              "nemo128.onnx",
-          ]
-          appdata = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local" / "share"))
-          cache = appdata / "Hoppy Whisper" / "models"
-          cache.mkdir(parents=True, exist_ok=True)
-          for f in files:
-              src = dl(repo_id=repo, filename=f)
-              shutil.copy2(src, cache / f)
-          print("Prefetched models to:", cache)
-          '@
-          Set-Content -Path prefetch_models.py -Value $code
-          poetry run python prefetch_models.py
-
-      - name: Build PyInstaller
-        run: poetry run pyinstaller --noconfirm --clean HoppyWhisper_onefile.spec
+      - name: Build PyInstaller (Remote Mode)
+        run: poetry run pyinstaller --noconfirm --clean HoppyWhisper_Remote.spec
 
       - name: Verify build outputs
         run: |
-          if (-not (Test-Path -Path "dist\Hoppy Whisper-CPU.exe")) { throw "Executable not found" }
+          if (-not (Test-Path -Path "dist\Hoppy Whisper\Hoppy Whisper.exe")) { throw "Executable not found" }
 
       - name: Generate checksums
         id: checksums
         run: |
           $hashes = @()
-          Get-ChildItem "dist" -Filter "*.exe" | ForEach-Object {
+          Get-ChildItem "dist\Hoppy Whisper" -Filter "*.exe" -Recurse | ForEach-Object {
             $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash
             $hashes += "$($hash)  $($_.Name)"
             Write-Host "$($_.Name): $hash"
@@ -114,7 +89,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hoppy-whisper-windows-${{ steps.version.outputs.version }}
-          path: dist/*.exe
+          path: dist/Hoppy Whisper/**
           if-no-files-found: error
 
       - name: Upload checksums
@@ -152,7 +127,7 @@ jobs:
           NOTES="## Release v${VERSION}
 
           ### Downloads
-          - **Hoppy Whisper.exe** - Windows transcription application
+          - **Hoppy Whisper.exe** - Remote transcription (optimized minimal build)
 
           ### What's New
           See the [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
@@ -160,7 +135,7 @@ jobs:
           ### Verification
           To verify the integrity of downloaded files:
           \`\`\`powershell
-          (Get-FileHash -Path 'Hoppy Whisper-CPU.exe' -Algorithm SHA256).Hash
+          (Get-FileHash -Path 'Hoppy Whisper.exe' -Algorithm SHA256).Hash
           \`\`\`
           Compare with the hashes in \`SHA256SUMS.txt\`
 
