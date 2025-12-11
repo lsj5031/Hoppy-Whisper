@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+import wave
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -127,6 +128,28 @@ class RemoteTranscriber:
         """Warmup is not needed for remote transcription."""
         logger.info("Remote transcriber warmup (no-op)")
 
+    def _get_audio_duration_ms(self, audio_path: Path) -> float:
+        """Calculate the duration of an audio file in milliseconds.
+
+        Args:
+            audio_path: Path to audio file (WAV format)
+
+        Returns:
+            Duration in milliseconds
+
+        Raises:
+            Exception: If audio file cannot be read
+        """
+        try:
+            with wave.open(str(audio_path), "rb") as wf:
+                frames = wf.getnframes()
+                rate = wf.getframerate()
+                duration_seconds = frames / float(rate)
+                return duration_seconds * 1000
+        except Exception as e:
+            logger.warning(f"Could not determine audio duration: {e}")
+            return 0.0
+
     def transcribe_file(self, audio_path: str | Path) -> TranscriptionResult:
         """Transcribe an audio file via remote API.
 
@@ -145,6 +168,10 @@ class RemoteTranscriber:
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
         logger.info(f"Transcribing {audio_path.name} via remote API...")
+
+        # Calculate duration from audio file, not HTTP request time
+        duration_ms = self._get_audio_duration_ms(audio_path)
+
         start_time = time.time()
 
         try:
@@ -165,7 +192,7 @@ class RemoteTranscriber:
                     timeout=self.timeout,
                 )
 
-            duration_ms = (time.time() - start_time) * 1000
+            request_time_ms = (time.time() - start_time) * 1000
 
             if response.status_code != 200:
                 logger.error(
@@ -185,8 +212,8 @@ class RemoteTranscriber:
             text = self._extract_text_from_response(response.json())
 
             logger.info(
-                f"Remote transcription completed in {duration_ms:.0f} ms: "
-                f"'{text[:50]}...'"
+                f"Remote transcription completed in {request_time_ms:.0f} ms: "
+                f"'{text[:50]}...' (audio duration: {duration_ms:.0f} ms)"
             )
 
             return TranscriptionResult(
