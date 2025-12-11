@@ -157,9 +157,15 @@ Settings are stored in `%LOCALAPPDATA%\Hoppy Whisper\settings.json` and can be e
   "first_run_complete": false,
   "history_retention_days": 90,
   "hotkey_chord": "CTRL+SHIFT+;",
+  "idle_reset_delay_ms": 1600.0,
+  "paste_predelay_ms": 180.0,
   "paste_window_seconds": 2.0,
+  "remote_transcription_api_key": "",
+  "remote_transcription_enabled": false,
+  "remote_transcription_endpoint": "",
   "start_with_windows": false,
-  "telemetry_enabled": false
+  "telemetry_enabled": false,
+  "transcribe_start_delay_ms": 800.0
 }
 ```
 
@@ -169,18 +175,73 @@ Settings are stored in `%LOCALAPPDATA%\Hoppy Whisper\settings.json` and can be e
 - `auto_paste`: Automatically paste transcription after recording stops
 - `history_retention_days`: Days to retain transcription history (0 = no limit, must manually clear)
 - `telemetry_enabled`: Enable local-only performance metrics logging
+- `remote_transcription_enabled`: Use remote API instead of local ONNX models (default: false)
+- `remote_transcription_endpoint`: URL of remote transcription API endpoint (required if remote enabled)
+- `remote_transcription_api_key`: Optional API key for authentication (e.g., Bearer token)
+- `transcribe_start_delay_ms`: Delay before transcription starts (milliseconds)
+- `paste_predelay_ms`: Delay before paste simulation (milliseconds)
+- `idle_reset_delay_ms`: Delay before tray icon returns to idle state (milliseconds)
 - `first_run_complete`: Internal flag for first-run notification
 
 **Environment Override:**
 Set `HOPPY_WHISPER_SETTINGS_PATH` to use a custom settings file location.
 
+### Remote Transcription
+
+Hoppy Whisper can be configured to use a remote transcription API instead of local ONNX models. This is useful if you want to:
+
+- Use a more powerful cloud-based model
+- Offload transcription to a remote server (e.g., GLM-ASR, Whisper API, custom endpoints)
+- Reduce local resource usage
+
+**To enable remote transcription:**
+
+1. Edit `settings.json` (`%LOCALAPPDATA%\Hoppy Whisper\settings.json`)
+2. Set `remote_transcription_enabled` to `true`
+3. Set `remote_transcription_endpoint` to your API endpoint URL
+4. (Optional) Set `remote_transcription_api_key` if your API requires authentication
+
+**Example configuration:**
+
+```json
+{
+  "remote_transcription_enabled": true,
+  "remote_transcription_endpoint": "http://localhost:8000/transcribe",
+  "remote_transcription_api_key": "your-api-key-here"
+}
+```
+
+**API Requirements:**
+
+The remote endpoint should:
+- Accept `POST` requests with audio file as `multipart/form-data` (field name: `audio`)
+- Return JSON with transcription text in one of these formats:
+  - `{"text": "transcribed text"}`
+  - `{"transcription": "transcribed text"}`
+  - `{"result": "transcribed text"}`
+  - `{"results": [{"text": "transcribed text"}]}`
+  - `{"data": {"text": "transcribed text"}}`
+- Support WAV audio format (16kHz, mono recommended)
+- Optionally support Bearer token authentication via `Authorization` header
+
+**Compatible APIs:**
+- [GLM-ASR](https://github.com/lsj5031/glm-asr-docker) - Docker-based ASR service
+- OpenAI Whisper API
+- Custom ASR endpoints following the format above
+
+**Notes:**
+- When remote transcription is enabled, local ONNX models are not loaded (faster startup, less RAM usage)
+- Network latency and API response time will affect transcription speed
+- Audio data is sent to the remote endpoint - ensure you trust the service provider if privacy is a concern
+
 ## Privacy & Data
 
-**Hoppy Whisper processes all audio and transcription data on your local device:**
+**Hoppy Whisper processes all audio and transcription data on your local device (by default):**
 
 - **No cloud services**: Audio capture, speech recognition, and text processing happen entirely on your machine using local ONNX Runtime models.
 - **No telemetry**: The application does not collect, transmit, or share usage data, analytics, or personal information.
 - **Performance metrics**: Opt-in local performance logging can be enabled by setting `telemetry_enabled: true` in settings. Metrics are logged locally only (no PII, no network transmission).
+- **Remote transcription**: If you enable remote transcription, audio recordings will be sent to your configured endpoint. Ensure you trust the service provider if privacy is a concern.
 
 ## Error Handling & Recovery
 
