@@ -201,20 +201,32 @@ Hoppy Whisper can be configured to use a remote transcription API instead of loc
 3. Set `remote_transcription_endpoint` to your API endpoint URL
 4. (Optional) Set `remote_transcription_api_key` if your API requires authentication
 
+**Configuration Details:**
+
+Edit `settings.json` directly or use the Settings menu:
+
+| Setting | Type | Required | Description |
+|---------|------|----------|-------------|
+| `remote_transcription_enabled` | boolean | Yes | Enable/disable remote transcription |
+| `remote_transcription_endpoint` | string | Yes (if enabled) | Full URL to your transcription API endpoint |
+| `remote_transcription_api_key` | string | No | Bearer token for authentication (sent as `Authorization: Bearer {token}`) |
+| `remote_transcription_model` | string | No | Optional model identifier to pass to the remote API |
+
 **Example configuration:**
 
 ```json
 {
   "remote_transcription_enabled": true,
   "remote_transcription_endpoint": "http://localhost:8000/transcribe",
-  "remote_transcription_api_key": "your-api-key-here"
+  "remote_transcription_api_key": "your-api-key-here",
+  "remote_transcription_model": ""
 }
 ```
 
 **API Requirements:**
 
 The remote endpoint should:
-- Accept `POST` requests with audio file as `multipart/form-data` (field name: `audio`)
+- Accept `POST` requests with audio file as `multipart/form-data` with field name `file`
 - Return JSON with transcription text in one of these formats:
   - `{"text": "transcribed text"}`
   - `{"transcription": "transcribed text"}`
@@ -229,10 +241,25 @@ The remote endpoint should:
 - OpenAI Whisper API
 - Custom ASR endpoints following the format above
 
+**Testing API Compatibility:**
+
+To verify your endpoint accepts the correct request format, you can test with `curl`:
+
+```powershell
+# Test with a sample WAV file
+curl -X POST `
+  -F "file=@path/to/audio.wav" `
+  -H "Authorization: Bearer your-api-key" `
+  http://your-endpoint/path
+```
+
+Your API should return 200 OK with JSON containing one of the supported text fields shown above.
+
 **Notes:**
 - When remote transcription is enabled, local ONNX models are not loaded (faster startup, less RAM usage)
 - Network latency and API response time will affect transcription speed
 - Audio data is sent to the remote endpoint - ensure you trust the service provider if privacy is a concern
+- If authentication fails, check that your API key format matches (some APIs use different header formats)
 
 ## Privacy & Data
 

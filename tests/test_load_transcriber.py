@@ -13,11 +13,13 @@ def test_load_transcriber_remote_mode():
         remote_enabled=True,
         remote_endpoint="http://localhost:8000/transcribe",
         remote_api_key="test-key",
+        remote_model="test-model",
     )
 
     assert isinstance(transcriber, RemoteTranscriber)
     assert transcriber.endpoint == "http://localhost:8000/transcribe"
     assert transcriber.api_key == "test-key"
+    assert transcriber.model == "test-model"
     assert transcriber.provider == "RemoteAPI"
 
 

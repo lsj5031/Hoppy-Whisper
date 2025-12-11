@@ -364,11 +364,43 @@ class AppRuntime:
             self._schedule_idle_reset()
 
         except RemoteTranscriptionError as exc:
-            LOGGER.exception("Remote transcription failed", exc_info=exc)
-            self._notify(
-                "Remote Transcription Failed",
-                "Could not transcribe audio via remote API. Check endpoint/network.",
+            # Log with structured context for debugging
+            LOGGER.error(
+                "Remote transcription failed",
+                extra={
+                    "error_type": exc.error_type.value,
+                    "context": exc.context,
+                    "status_code": exc.status_code,
+                    "retryable": exc.is_retryable(),
+                },
+                exc_info=exc,
             )
+
+            # User-facing message based on error category
+            if exc.error_type.name == "NETWORK_TIMEOUT":
+                message = (
+                    "Remote transcription timed out. "
+                    "Check network/endpoint latency."
+                )
+            elif exc.error_type.name == "CONNECTION_FAILED":
+                message = (
+                    "Cannot connect to remote API. "
+                    "Check endpoint URL and network."
+                )
+            elif exc.error_type.name == "HTTP_ERROR":
+                message = (
+                    f"Remote API error (HTTP {exc.status_code}). "
+                    "Check API status."
+                )
+            elif exc.error_type.name == "PARSE_ERROR":
+                message = (
+                    "Remote API returned unexpected format. "
+                    "Check API configuration."
+                )
+            else:
+                message = "Remote transcription failed. Check endpoint and network."
+
+            self._notify("Remote Transcription Failed", message)
             self._tray.set_state(TrayState.ERROR)
             self._schedule_idle_reset()
         except Exception as exc:
@@ -721,6 +753,7 @@ def main() -> int:
             remote_enabled=settings.remote_transcription_enabled,
             remote_endpoint=settings.remote_transcription_endpoint,
             remote_api_key=settings.remote_transcription_api_key,
+            remote_model=settings.remote_transcription_model,
         )
         try:
             requested = getattr(transcriber, "provider_requested", "")

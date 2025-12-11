@@ -29,6 +29,7 @@ def load_transcriber(
     remote_enabled: bool = False,
     remote_endpoint: str = "",
     remote_api_key: str = "",
+    remote_model: str = "",
 ) -> HoppyTranscriber | RemoteTranscriber:
     """Load and warm up the transcriber.
 
@@ -38,6 +39,7 @@ def load_transcriber(
         remote_enabled: If True, use remote transcription instead of local ONNX
         remote_endpoint: URL of the remote transcription endpoint
         remote_api_key: Optional API key for remote authentication
+        remote_model: Optional model identifier for remote API
 
     Returns:
         Either a HoppyTranscriber (local) or RemoteTranscriber (remote)
@@ -51,6 +53,7 @@ def load_transcriber(
         remote_transcriber = RemoteTranscriber(
             endpoint=remote_endpoint,
             api_key=remote_api_key,
+            model=remote_model,
         )
         remote_transcriber.warmup()
         return remote_transcriber
