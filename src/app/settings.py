@@ -27,7 +27,7 @@ class AppSettings:
     paste_predelay_ms: float = 180.0
     idle_reset_delay_ms: float = 1600.0
     # Remote transcription settings
-    remote_transcription_enabled: bool = False
+    remote_transcription_enabled: bool = True
     remote_transcription_endpoint: str = ""
     remote_transcription_api_key: str = ""
     remote_transcription_model: str = ""

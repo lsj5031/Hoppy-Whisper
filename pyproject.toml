@@ -1,6 +1,6 @@
 [project]
 name = "hoppy-whisper"
-version = "1.0.0"
+version = "1.1.0"
 description = "Windows tray transcription app with GPU acceleration"
 authors = [{ name = "hoppy whisper Contributors", email = "lsj5031@gmail.com" }]
 readme = "README.md"
