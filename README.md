@@ -7,19 +7,20 @@
   <img alt="Hoppy Whisper - Cute bunny transcription app" src="icos/BunnyStandby.ico" width="128" height="128">
 </picture>
 
-Hoppy Whisper is a Windows-native tray application for fast speech transcription and clipboard automation. Built with ONNX Runtime and WebRTC VAD for on-device processing, it captures audio via a global hotkey, transcribes locally, and pastes results into any application—no cloud services, no telemetry.
+Hoppy Whisper is a Windows-native tray application for fast speech transcription and clipboard automation. **Remote-first design** routes transcription requests to a configurable HTTP API endpoint, while local WebRTC VAD handles noise filtering. Captures audio via global hotkey and pastes results into any application. Supports local ONNX processing as a fallback.
 
 </div>
 
 ## Features
 
 - 🎤 **Record with a hotkey** - Press & hold `Ctrl+Shift+;` to start recording
-- ✨ **Instant transcription** - ONNX-powered speech-to-text in seconds
+- 🌐 **Remote-first transcription** - Routes to configurable HTTP API endpoint (GLM-ASR, Whisper, custom services)
+- ✨ **Instant transcription** - Fast speech-to-text in seconds
 - 📋 **Auto-paste** - Transcription automatically pastes into your active window
-- 🔐 **100% private** - All processing happens on your machine, no cloud services
-- 🔇 **Smart noise filtering** - WebRTC VAD eliminates background noise
+- 🔇 **Smart noise filtering** - WebRTC VAD eliminates background noise locally
 - 💾 **Local history** - Search past transcriptions (90-day retention)
-- ⚡ **GPU accelerated** - Optional DirectML support for compatible hardware
+- 🔧 **Fallback to local ONNX** - Optional on-device ONNX Runtime for offline processing
+- ⚡ **Minimal footprint** - No bundled ML models, ~20MB executable
 
 ## Quick start
 
@@ -49,26 +50,26 @@ Hoppy Whisper is a Windows-native tray application for fast speech transcription
 **Download and install the latest release:**
 
 1. Go to [Releases](https://github.com/lsj5031/Hoppy-Whisper/releases/latest)
-2. Download **`Hoppy Whisper-CPU.exe`** (CPU-based inference, works on all systems)
+2. Download **`Hoppy Whisper.exe`** (Remote-first minimal build, ~20 MB)
 3. Extract and run the `.exe` file - the app will appear in your system tray
 
 **System Requirements:**
 - Windows 10 (64-bit) or Windows 11
-- 2GB RAM minimum, 4GB recommended
-- 1GB free disk space for models
+- 2GB RAM minimum
 - Microphone access
-- Internet connection for first-run model download
+- Internet connection (to reach remote transcription endpoint)
 
-**GPU Acceleration (Optional):**
-- The CPU executable automatically detects and uses DirectML GPU acceleration if available
-- Requires DirectX 12 compatible GPU (NVIDIA, AMD, Intel, or Qualcomm)
-- If no GPU is detected, falls back seamlessly to CPU inference
-- No separate GPU executable needed; one build works for all hardware
+**Remote Transcription Setup:**
+- By default, Hoppy Whisper expects a remote transcription API endpoint
+- Configure the endpoint in `settings.json` (see [Configuration](#configuration) section)
+- Supports popular services: **GLM-ASR**, **Whisper API**, or any custom HTTP endpoint
+- Audio is sent to your configured endpoint for processing
 
 **First-run setup:**
 - A notification will explain the default hotkey (`Ctrl+Shift+;`)
-- On first transcription, models (~500MB) will download automatically from Hugging Face
-- Models are cached locally in `%LOCALAPPDATA%\Hoppy Whisper\models\`
+- Settings are stored in `%LOCALAPPDATA%\Hoppy Whisper\settings.json`
+- Configure `remote_transcription_endpoint` before first use
+- Transcription history is cached locally in `%LOCALAPPDATA%\Hoppy Whisper\history.db`
 
 ### For Developers
 
@@ -85,29 +86,33 @@ Hoppy Whisper is a Windows-native tray application for fast speech transcription
    poetry run ruff check src/
    ```
 
-3. **Build the executable:**
-    ```powershell
-    poetry run pyinstaller --noconfirm --clean HoppyWhisper_onefile.spec
-    ```
-    Output: `dist\Hoppy Whisper-CPU.exe` (~20 MB without bundled models)
+3. **Build the executable (remote-first):**
+     ```powershell
+     poetry run pyinstaller --noconfirm --clean HoppyWhisper_Remote.spec
+     ```
+     Output: `dist\Hoppy Whisper\Hoppy Whisper.exe` (~20 MB, no ML models bundled)
 
 4. **Test the build:**
-    ```powershell
-    .\dist\Hoppy Whisper-CPU.exe
-    ```
+     ```powershell
+     .\dist\"Hoppy Whisper"\"Hoppy Whisper.exe"
+     ```
+
+**Build Variants:**
+- **`HoppyWhisper_Remote.spec`** (default) - Remote-first, minimal ~20MB (no ONNX Runtime)
+- **`HoppyWhisper_onefile.spec`** - Local CPU-only inference, ~60MB single file
+- **`HoppyWhisper_DML_onefile.spec`** - Local inference with DirectML GPU support, ~65MB
 
 **Build Notes:**
-- The single executable automatically detects and uses DirectML GPU acceleration if available
-- Models (~500 MB) download automatically on first launch from Hugging Face
-- To pre-bundle models into the executable, place them in `%LOCALAPPDATA%\Hoppy Whisper\models\` before building
-- With bundled models, the executable is ~57 MB; without them, it's ~20 MB
+- Remote spec excludes all ONNX Runtime and model dependencies for minimal size
+- Requires configured `remote_transcription_endpoint` in settings.json
+- Local specs include full ONNX Runtime and automatically download models (~500MB) on first launch
 
 ## CI and Releases
 
 - **Windows CI** runs on push events to `master`, and tags matching `v*`
-- The workflow installs Poetry, runs Ruff linting, executes pytest, and builds a single-file PyInstaller executable
-- The release attaches `Hoppy Whisper-CPU.exe` as an artifact
-- **Tag pushes** that match `v*` automatically create a GitHub Release with the zip attached and auto-generated release notes
+- The workflow installs Poetry, runs Ruff linting, executes pytest, and builds using `HoppyWhisper_Remote.spec`
+- The release attaches the minimal remote-first `Hoppy Whisper.exe` (no bundled models, ~20 MB)
+- **Tag pushes** that match `v*` automatically create a GitHub Release with artifacts and auto-generated release notes
 
 ### Creating a Release
 
@@ -175,7 +180,7 @@ Settings are stored in `%LOCALAPPDATA%\Hoppy Whisper\settings.json` and can be e
 - `auto_paste`: Automatically paste transcription after recording stops
 - `history_retention_days`: Days to retain transcription history (0 = no limit, must manually clear)
 - `telemetry_enabled`: Enable local-only performance metrics logging
-- `remote_transcription_enabled`: Use remote API instead of local ONNX models (default: false)
+- `remote_transcription_enabled`: Use remote API instead of local ONNX models (default: **true**)
 - `remote_transcription_endpoint`: URL of remote transcription API endpoint (required if remote enabled)
 - `remote_transcription_api_key`: Optional API key for authentication (e.g., Bearer token)
 - `transcribe_start_delay_ms`: Delay before transcription starts (milliseconds)
@@ -188,17 +193,18 @@ Set `HOPPY_WHISPER_SETTINGS_PATH` to use a custom settings file location.
 
 ### Remote Transcription
 
-Hoppy Whisper can be configured to use a remote transcription API instead of local ONNX models. This is useful if you want to:
+**Hoppy Whisper defaults to remote transcription.** This is the recommended setup because:
 
-- Use a more powerful cloud-based model
-- Offload transcription to a remote server (e.g., GLM-ASR, Whisper API, custom endpoints)
-- Reduce local resource usage
+- Minimal application size (~20 MB, no ML models bundled)
+- Uses powerful cloud or self-hosted models (GLM-ASR, Whisper API, custom endpoints)
+- No need for model downloads or updates
+- Faster deployment and lower system requirements
 
-**To enable remote transcription:**
+**To configure remote transcription:**
 
 1. Edit `settings.json` (`%LOCALAPPDATA%\Hoppy Whisper\settings.json`)
-2. Set `remote_transcription_enabled` to `true`
-3. Set `remote_transcription_endpoint` to your API endpoint URL
+2. Set `remote_transcription_enabled` to `true` (already the default)
+3. Set `remote_transcription_endpoint` to your API endpoint URL (required)
 4. (Optional) Set `remote_transcription_api_key` if your API requires authentication
 
 **Configuration Details:**
@@ -263,12 +269,13 @@ Your API should return 200 OK with JSON containing one of the supported text fie
 
 ## Privacy & Data
 
-**Hoppy Whisper processes all audio and transcription data on your local device (by default):**
+**Hoppy Whisper by default uses remote transcription for audio processing:**
 
-- **No cloud services**: Audio capture, speech recognition, and text processing happen entirely on your machine using local ONNX Runtime models.
-- **No telemetry**: The application does not collect, transmit, or share usage data, analytics, or personal information.
+- **Remote transcription**: Audio recordings are sent to your configured API endpoint for processing. Ensure you trust the service provider if privacy is a concern.
+- **No telemetry**: The application does not collect, transmit, or share usage data, analytics, or personal information to Hoppy Whisper servers.
 - **Performance metrics**: Opt-in local performance logging can be enabled by setting `telemetry_enabled: true` in settings. Metrics are logged locally only (no PII, no network transmission).
-- **Remote transcription**: If you enable remote transcription, audio recordings will be sent to your configured endpoint. Ensure you trust the service provider if privacy is a concern.
+- **Local-only option**: If you need on-device processing, you can use `HoppyWhisper_onefile.spec` to build with local ONNX models instead.
+- **Local history**: Transcription history is stored in a local SQLite database at `%LOCALAPPDATA%\Hoppy Whisper\history.db`. Retention is configurable (default 90 days). Transcripts never leave your machine unless you explicitly export them.
 
 ## Error Handling & Recovery
 
