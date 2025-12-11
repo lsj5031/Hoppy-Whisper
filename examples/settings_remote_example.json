@@ -1,0 +1,21 @@
+{
+  "auto_paste": true,
+  "first_run_complete": false,
+  "history_retention_days": 90,
+  "hotkey_chord": "CTRL+SHIFT+;",
+  "idle_reset_delay_ms": 1600.0,
+  "paste_predelay_ms": 180.0,
+  "paste_window_seconds": 2.0,
+  "start_with_windows": false,
+  "telemetry_enabled": false,
+  "transcribe_start_delay_ms": 800.0,
+  "_comment_remote_1": "=== Remote Transcription Configuration ===",
+  "_comment_remote_2": "To use remote transcription instead of local ONNX models:",
+  "_comment_remote_3": "1. Set remote_transcription_enabled to true",
+  "_comment_remote_4": "2. Set remote_transcription_endpoint to your API URL",
+  "_comment_remote_5": "3. Optionally set remote_transcription_api_key for authentication",
+  "_comment_remote_6": "Example: GLM-ASR Docker running on localhost:8000",
+  "remote_transcription_enabled": false,
+  "remote_transcription_endpoint": "http://localhost:8000/transcribe",
+  "remote_transcription_api_key": ""
+}

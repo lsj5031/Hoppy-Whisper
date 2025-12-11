@@ -17,6 +17,7 @@ dependencies = [
     "onnx-asr (>=0.1.0)",
     "pyperclip (>=1.8.2,<2.0.0)",
     "huggingface-hub (>=0.25.0,<1.0.0)",
+    "requests (>=2.31.0,<3.0.0)",
 ]
 
 license-files = ["LICENSE"]
@@ -37,6 +38,7 @@ onnxruntime-directml = ">=1.20.0,<2.0.0"
 onnx-asr = ">=0.1.0"
 pyperclip = ">=1.8.2,<2.0.0"
 huggingface-hub = ">=0.25.0,<1.0.0"
+requests = ">=2.31.0,<3.0.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.4"

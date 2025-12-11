@@ -30,7 +30,12 @@ from app.settings import (
     default_metrics_log_path,
     default_settings_path,
 )
-from app.transcriber import HoppyTranscriber, load_transcriber
+from app.transcriber import (
+    HoppyTranscriber,
+    RemoteTranscriber,
+    RemoteTranscriptionError,
+    load_transcriber,
+)
 from app.tray import TrayController, TrayMenuActions, TrayState
 
 LOGGER = logging.getLogger("hoppy_whisper")
@@ -39,7 +44,9 @@ LOGGER = logging.getLogger("hoppy_whisper")
 class AppRuntime:
     """High-level coordinator that wires the tray and hotkey subsystems."""
 
-    def __init__(self, settings: AppSettings, transcriber: HoppyTranscriber) -> None:
+    def __init__(
+        self, settings: AppSettings, transcriber: HoppyTranscriber | RemoteTranscriber
+    ) -> None:
         self._settings = settings
         self._transcriber = transcriber
         self._stop_event = threading.Event()
@@ -356,6 +363,46 @@ class AppRuntime:
 
             self._schedule_idle_reset()
 
+        except RemoteTranscriptionError as exc:
+            # Log with structured context for debugging
+            LOGGER.error(
+                "Remote transcription failed",
+                extra={
+                    "error_type": exc.error_type.value,
+                    "context": exc.context,
+                    "status_code": exc.status_code,
+                    "retryable": exc.is_retryable(),
+                },
+                exc_info=exc,
+            )
+
+            # User-facing message based on error category
+            if exc.error_type.name == "NETWORK_TIMEOUT":
+                message = (
+                    "Remote transcription timed out. "
+                    "Check network/endpoint latency."
+                )
+            elif exc.error_type.name == "CONNECTION_FAILED":
+                message = (
+                    "Cannot connect to remote API. "
+                    "Check endpoint URL and network."
+                )
+            elif exc.error_type.name == "HTTP_ERROR":
+                message = (
+                    f"Remote API error (HTTP {exc.status_code}). "
+                    "Check API status."
+                )
+            elif exc.error_type.name == "PARSE_ERROR":
+                message = (
+                    "Remote API returned unexpected format. "
+                    "Check API configuration."
+                )
+            else:
+                message = "Remote transcription failed. Check endpoint and network."
+
+            self._notify("Remote Transcription Failed", message)
+            self._tray.set_state(TrayState.ERROR)
+            self._schedule_idle_reset()
         except Exception as exc:
             LOGGER.exception("Transcription failed", exc_info=exc)
             self._notify(
@@ -678,25 +725,36 @@ def main() -> int:
     metrics.start("startup")
 
     # Optional: prefetch model assets in the background for offline readiness
-    def _prefetch_models() -> None:
+    # (skip if using remote transcription)
+    if not settings.remote_transcription_enabled:
+
+        def _prefetch_models() -> None:
+            try:
+                from app.transcriber import get_model_manager
+
+                manager = get_model_manager()
+                manager.ensure_models()
+            except Exception:
+                # Prefetch is best-effort; ignore failures
+                LOGGER.debug("Model prefetch failed", exc_info=True)
+
         try:
-            from app.transcriber import get_model_manager
-
-            manager = get_model_manager()
-            manager.ensure_models()
+            threading.Thread(target=_prefetch_models, daemon=True).start()
         except Exception:
-            # Prefetch is best-effort; ignore failures
-            LOGGER.debug("Model prefetch failed", exc_info=True)
-
-    try:
-        threading.Thread(target=_prefetch_models, daemon=True).start()
-    except Exception:
-        LOGGER.debug("Failed to start model prefetch thread", exc_info=True)
+            LOGGER.debug("Failed to start model prefetch thread", exc_info=True)
 
     # Load and warm up the transcriber
-    LOGGER.info("Loading transcriber...")
+    if settings.remote_transcription_enabled:
+        LOGGER.info("Loading remote transcriber...")
+    else:
+        LOGGER.info("Loading local transcriber...")
     try:
-        transcriber = load_transcriber()
+        transcriber = load_transcriber(
+            remote_enabled=settings.remote_transcription_enabled,
+            remote_endpoint=settings.remote_transcription_endpoint,
+            remote_api_key=settings.remote_transcription_api_key,
+            remote_model=settings.remote_transcription_model,
+        )
         try:
             requested = getattr(transcriber, "provider_requested", "")
             LOGGER.info(
@@ -708,10 +766,16 @@ def main() -> int:
             LOGGER.info("Transcriber ready (provider: %s)", transcriber.provider)
     except Exception as exc:
         LOGGER.exception("Failed to load transcriber", exc_info=exc)
-        show_error_dialog(
-            "Failed to load speech recognition model. "
-            "Please check your internet connection and try again."
-        )
+        if settings.remote_transcription_enabled:
+            show_error_dialog(
+                "Failed to connect to remote transcription service. "
+                "Please check your endpoint configuration and try again."
+            )
+        else:
+            show_error_dialog(
+                "Failed to load speech recognition model. "
+                "Please check your internet connection and try again."
+            )
         return 1
 
     try:
