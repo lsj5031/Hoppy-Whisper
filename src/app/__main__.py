@@ -329,9 +329,8 @@ class AppRuntime:
 
             # Auto-paste first to avoid focus issues from notifications
             if self._settings.auto_paste:
-                LOGGER.debug("Auto-paste enabled, performing paste (Shift+Insert only)")
-                # Avoid duplication in apps that handle both Shift+Insert and Ctrl+V
-                self._perform_paste(allow_ctrl_v=False)
+                LOGGER.debug("Auto-paste enabled, performing paste")
+                self._perform_paste()
                 self._tray.set_state(TrayState.PASTED)
 
             self._notify("Transcribed", f"{cleaned_text[:60]}...")
@@ -414,14 +413,13 @@ class AppRuntime:
     def _handle_request_paste(self) -> None:
         LOGGER.debug("Hotkey tapped within paste window: paste")
         self._tray.set_state(TrayState.PASTED)
-        # Manual paste request: allow Ctrl+V fallback for broader app compatibility
-        self._perform_paste(allow_ctrl_v=True)
+        self._perform_paste()
         self._schedule_idle_reset()
 
-    def _perform_paste(self, allow_ctrl_v: bool = True) -> None:
+    def _perform_paste(self) -> None:
         """Simulate paste into the focused window.
 
-        On Windows, use Shift+Insert; optionally fall back to Ctrl+V if allowed.
+        On Windows, use Shift+Insert (the standard Windows paste command).
         On other platforms, use Ctrl+V.
         """
         try:
@@ -433,20 +431,13 @@ class AppRuntime:
             time.sleep(predelay)
 
             if sys.platform == "win32":
-                # Use Shift+Insert as the primary paste sequence
+                # Use Shift+Insert as the standard Windows paste command.
+                # Do not send both Shift+Insert and Ctrl+V, as many apps respond
+                # to both and will paste twice. Shift+Insert is the most reliable.
                 with self._keyboard_controller.pressed(Key.shift):
                     self._keyboard_controller.press(Key.insert)
                     self._keyboard_controller.release(Key.insert)
-                if allow_ctrl_v:
-                    # Small delay between paste attempts
-                    time.sleep(0.08)
-                    # Optional fallback: Ctrl+V
-                    with self._keyboard_controller.pressed(Key.ctrl):
-                        self._keyboard_controller.press("v")
-                        self._keyboard_controller.release("v")
-                    LOGGER.info("Paste commands sent (Shift+Insert, Ctrl+V)")
-                else:
-                    LOGGER.info("Paste command sent (Shift+Insert)")
+                LOGGER.info("Paste command sent (Shift+Insert)")
             else:
                 with self._keyboard_controller.pressed(Key.ctrl):
                     self._keyboard_controller.press("v")
