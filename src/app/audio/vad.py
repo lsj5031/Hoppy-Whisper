@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import logging
 import warnings
+from typing import Any
 
 import numpy as np
 
-# Suppress deprecation warning emitted by webrtcvad importing pkg_resources
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=UserWarning, module=r"^webrtcvad$")
-    import webrtcvad
-
 LOGGER = logging.getLogger(__name__)
+
+
+def _import_webrtcvad() -> Any:
+    # Suppress deprecation warning emitted by webrtcvad importing pkg_resources
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, module=r"^webrtcvad$")
+        import webrtcvad  # type: ignore
+
+    return webrtcvad
 
 
 class VoiceActivityDetector:
@@ -58,6 +63,8 @@ class VoiceActivityDetector:
         self._trailing_silence_ms = trailing_silence_ms
 
         self._frame_size = (sample_rate * frame_duration_ms) // 1000
+
+        webrtcvad = _import_webrtcvad()
         self._vad = webrtcvad.Vad(aggressiveness)
 
         self._silence_frames = 0

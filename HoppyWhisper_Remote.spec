@@ -9,6 +9,7 @@ Use this when remote_transcription_enabled=true to reduce bundle size.
 import os
 from pathlib import Path
 import certifi
+from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 
 SCRIPT = 'src/app/__main__.py'
 
@@ -37,6 +38,11 @@ hidden = [
     'pystray', 'pynput', 'sounddevice', 'webrtcvad', 'pyperclip', 'numpy',
     'PIL', 'PIL.Image', 'PIL.ImageDraw',
 
+    # pkg_resources (used by webrtcvad) + setuptools vendor deps
+    'pkg_resources',
+    'jaraco', 'jaraco.text', 'jaraco.functools', 'jaraco.context', 'jaraco.collections',
+    'more_itertools',
+
     # requests stack for remote API calls
     'requests', 'urllib3', 'urllib3.util', 'urllib3.contrib', 'idna',
     'charset_normalizer', 'certifi',
@@ -49,6 +55,23 @@ datas = [
     ('src/app/py.typed', 'app'),
     (certifi.where(), 'certifi'),
 ]
+
+# Ensure pkg_resources can resolve webrtcvad's metadata in frozen builds.
+try:
+    datas += copy_metadata('webrtcvad')
+except Exception:
+    pass
+
+# Ensure setuptools vendored dependencies exist on filesystem for pkg_resources.
+try:
+    import setuptools  # noqa: F401
+except Exception:
+    setuptools = None  # type: ignore
+
+try:
+    datas += collect_data_files('jaraco.text')
+except Exception:
+    pass
 
 # Include tray ICO assets
 try:
@@ -84,8 +107,9 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
     name='Hoppy Whisper',
     debug=False,
     bootloader_ignore_signals=False,
@@ -98,12 +122,4 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=False,
-    name='Hoppy Whisper',
 )

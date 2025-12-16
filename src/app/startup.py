@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import sys
 from pathlib import Path
-from typing import Generator, Optional
+from typing import Any, Generator
 
 RUN_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
@@ -32,6 +32,8 @@ def enable_startup(app_name: str, command: str) -> None:
     _ensure_winreg()
     try:
         with _run_key(write=True, create_if_missing=True) as key:
+            if key is None:  # pragma: no cover
+                raise StartupError("Failed to open HKCU Run key")
             winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, command)
     except OSError as exc:  # pragma: no cover - error path validated in production
         raise StartupError(f"Failed to enable startup for {app_name}") from exc
@@ -72,7 +74,7 @@ def is_startup_enabled(app_name: str, expected_command: str | None = None) -> bo
 @contextlib.contextmanager
 def _run_key(
     *, write: bool, create_if_missing: bool
-) -> Generator[Optional[object], None, None]:
+) -> Generator[Any | None, None, None]:
     """Context manager returning the Run registry key handle."""
     key = None
     if write:

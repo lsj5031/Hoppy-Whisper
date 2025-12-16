@@ -14,7 +14,7 @@ import pyperclip
 from pynput.keyboard import Controller, Key
 
 from app import startup
-from app.audio import AudioDeviceError, AudioRecorder, create_vad
+from app.audio import AudioDeviceError, AudioRecorder, VoiceActivityDetector, create_vad
 from app.audio.buffer import TempWavFile
 from app.history import HistoryDAO, HistoryPalette
 from app.hotkey import HotkeyCallbacks, HotkeyInUseError, HotkeyManager
@@ -56,7 +56,7 @@ class AppRuntime:
         self._app_name = "Hoppy Whisper"
         self._startup_command = startup.resolve_startup_command()
         # VAD state
-        self._vad = None
+        self._vad: VoiceActivityDetector | None = None
         self._vad_carry = np.array([], dtype=np.float32)
         self._vad_stop_requested = False
 
@@ -378,23 +378,19 @@ class AppRuntime:
             # User-facing message based on error category
             if exc.error_type.name == "NETWORK_TIMEOUT":
                 message = (
-                    "Remote transcription timed out. "
-                    "Check network/endpoint latency."
+                    "Remote transcription timed out. " "Check network/endpoint latency."
                 )
             elif exc.error_type.name == "CONNECTION_FAILED":
                 message = (
-                    "Cannot connect to remote API. "
-                    "Check endpoint URL and network."
+                    "Cannot connect to remote API. " "Check endpoint URL and network."
                 )
             elif exc.error_type.name == "HTTP_ERROR":
                 message = (
-                    f"Remote API error (HTTP {exc.status_code}). "
-                    "Check API status."
+                    f"Remote API error (HTTP {exc.status_code}). " "Check API status."
                 )
             elif exc.error_type.name == "PARSE_ERROR":
                 message = (
-                    "Remote API returned unexpected format. "
-                    "Check API configuration."
+                    "Remote API returned unexpected format. " "Check API configuration."
                 )
             else:
                 message = "Remote transcription failed. Check endpoint and network."

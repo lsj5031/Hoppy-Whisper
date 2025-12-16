@@ -241,7 +241,8 @@ def _open_ico_scaled(path: Path, size: int) -> Optional[Image.Image]:
             if target is None:
                 target = im.convert("RGBA")
             if target.size != (size, size):
-                target = target.resize((size, size), Image.LANCZOS)
+                resample = getattr(Image, "Resampling", Image).LANCZOS
+                target = target.resize((size, size), resample)
             return target.copy()
     except Exception:
         return None

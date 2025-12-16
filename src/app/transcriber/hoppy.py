@@ -8,7 +8,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +116,8 @@ class HoppyTranscriber:
                 "onnx-asr not installed. Please install it to use transcription."
             ) from e
 
+        load_model: Any = cast(Any, onnx_asr).load_model
+
         logger.info("Loading TDT 0.6b model...")
         start_time = time.time()
 
@@ -154,7 +156,7 @@ class HoppyTranscriber:
                 # Bundled case: pass known model name with explicit model_dir
                 try:
                     logger.info(f"Loading model locally from: {local_model_dir}")
-                    self._model = onnx_asr.load_model(
+                    self._model = load_model(
                         HOPPY_MODEL_REPO,
                         model_dir=str(local_model_dir),
                         providers=self._providers,
@@ -163,22 +165,22 @@ class HoppyTranscriber:
                 except TypeError:
                     # Fallbacks for older signatures
                     try:
-                        self._model = onnx_asr.load_model(
+                        self._model = load_model(
                             HOPPY_MODEL_REPO,
                             model_dir=str(local_model_dir),
                         )
                     except TypeError:
-                        self._model = onnx_asr.load_model(HOPPY_MODEL_REPO)
+                        self._model = load_model(HOPPY_MODEL_REPO)
             else:
                 # Non-frozen or no local bundle: use repo name, allow download/cache
                 try:
-                    self._model = onnx_asr.load_model(
+                    self._model = load_model(
                         HOPPY_MODEL_REPO,
                         providers=self._providers,
                         provider_options=self._provider_options,
                     )
                 except TypeError:
-                    self._model = onnx_asr.load_model(HOPPY_MODEL_REPO)
+                    self._model = load_model(HOPPY_MODEL_REPO)
         except Exception as e:
             if isinstance(e, ModuleNotFoundError) and e.name == "huggingface_hub":
                 friendly = (
