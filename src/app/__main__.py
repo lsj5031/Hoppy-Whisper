@@ -28,7 +28,6 @@ from app.settings import (
     AppSettings,
     default_history_db_path,
     default_metrics_log_path,
-    default_settings_path,
 )
 from app.transcriber import (
     HoppyTranscriber,
@@ -37,6 +36,7 @@ from app.transcriber import (
     load_transcriber,
 )
 from app.tray import TrayController, TrayMenuActions, TrayState
+from app.ui import OnboardingWizard, SettingsWindow, ToastManager
 
 LOGGER = logging.getLogger("hoppy_whisper")
 
@@ -70,11 +70,15 @@ class AppRuntime:
         self._history.open()
         registry_startup = self._probe_startup_state()
         self._toggle_mode = True
+
+        # Initialize UI components
+        self._toast_manager = ToastManager()
+
         self._tray = TrayController(
             app_name=self._app_name,
             menu_actions=TrayMenuActions(
                 toggle_recording=self._menu_toggle_recording,
-                show_settings=self._show_settings_tip,
+                show_settings=self._show_settings_window,
                 show_history=self._show_history_tip,
                 restart_app=self._restart,
                 set_start_with_windows=self._set_start_with_windows,
@@ -99,13 +103,19 @@ class AppRuntime:
     def start(self) -> None:
         """Start the tray icon and hotkey listener."""
         LOGGER.info("Starting Hoppy Whisper runtime")
+
+        # Show onboarding wizard for first-time users
+        if not self._settings.first_run_complete:
+            if self._show_onboarding_wizard():
+                self._toast_manager.success("Setup completed! Press your hotkey to start transcribing.")
+            else:
+                LOGGER.info("Onboarding cancelled by user")
+                self._toast_manager.info("You can run setup again from the Settings menu.")
+
         self._tray.start()
         self._hotkey.start()
         if self._settings.start_with_windows:
             self._apply_startup_setting(True)
-        if not self._settings.first_run_complete:
-            self._settings.first_run_complete = True
-            self._settings.save()
 
     def stop(self) -> None:
         """Shut down background services and signal termination."""
@@ -119,6 +129,10 @@ class AppRuntime:
         self._tray.stop()
         self._history.close()
 
+        # Cleanup toast manager
+        if hasattr(self, '_toast_manager'):
+            self._toast_manager.cleanup()
+
     def wait(self) -> None:
         """Block the main thread until a quit signal arrives."""
         self._stop_event.wait()
@@ -131,30 +145,57 @@ class AppRuntime:
         else:
             self._handle_record_start()
 
-    def _show_settings_tip(self) -> None:
-        path = default_settings_path()
-        self._settings.save(path)
+    def _show_settings_window(self) -> None:
+        """Show the settings window for configuration management."""
         try:
-            import os
-            import subprocess
-            import sys
-
-            if sys.platform == "win32":
-                subprocess.Popen(["notepad.exe", str(path)])
-            else:
-                # Best-effort: open with default editor/viewer
-                if hasattr(os, "startfile"):
-                    os.startfile(str(path))  # type: ignore[attr-defined]
-                else:
-                    subprocess.Popen(["xdg-open", str(path)])
-        except Exception as exc:
-            LOGGER.debug("Failed to open settings editor", exc_info=exc)
-            self._notify(
-                "Settings",
-                f"Edit {path} to change the hotkey, paste window, or startup options.",
+            settings_window = SettingsWindow(
+                settings=self._settings,
+                on_apply=self._on_settings_applied,
             )
-            return
-        self._notify("Settings", "Opened settings in Notepad.")
+            settings_window.show()
+        except Exception as exc:
+            LOGGER.exception("Failed to open settings window", exc_info=exc)
+            self._toast_manager.error(
+                "Failed to open settings window. Please try again.",
+                "Settings Error"
+            )
+
+    def _show_onboarding_wizard(self) -> bool:
+        """Show the onboarding wizard for first-time setup."""
+        try:
+            onboarding = OnboardingWizard(
+                settings=self._settings,
+                on_complete=self._on_onboarding_complete,
+            )
+            return onboarding.show()
+        except Exception as exc:
+            LOGGER.exception("Failed to show onboarding wizard", exc_info=exc)
+            self._toast_manager.error(
+                "Failed to open setup wizard. You can configure settings manually.",
+                "Setup Error"
+            )
+            return False
+
+    def _on_settings_applied(self) -> None:
+        """Handle settings changes applied through the settings window."""
+        self._toast_manager.success("Settings saved successfully.", "Configuration")
+
+        # Restart hotkey with new settings
+        try:
+            self._hotkey.stop()
+            self._hotkey.start()
+        except Exception as exc:
+            LOGGER.error("Failed to restart hotkey after settings change: %s", exc)
+            self._toast_manager.error(
+                "Settings applied, but hotkey restart failed. Please restart the application.",
+                "Hotkey Error"
+            )
+
+    def _on_onboarding_complete(self) -> None:
+        """Handle onboarding completion."""
+        self._settings.first_run_complete = True
+        self._settings.save()
+        LOGGER.info("Onboarding completed and settings saved")
 
     def _show_history_tip(self) -> None:
         """Open the history search palette."""
@@ -168,7 +209,7 @@ class AppRuntime:
             palette.show()
         except Exception as exc:
             LOGGER.exception("Failed to open history palette", exc_info=exc)
-            self._notify("History Error", "Could not open history palette")
+            self._toast_manager.error("Could not open history palette", "History Error")
 
     def _set_start_with_windows(self, enabled: bool) -> None:
         if self._settings.start_with_windows == enabled:
@@ -179,7 +220,7 @@ class AppRuntime:
         self._settings.start_with_windows = enabled
         self._settings.save()
         state = "enabled" if enabled else "disabled"
-        self._notify("Startup", f"Launch at login {state}.")
+        self._toast_manager.success(f"Launch at login {state}.", "Startup")
 
     # Hotkey callbacks ----------------------------------------------------
 
@@ -211,13 +252,13 @@ class AppRuntime:
             self._tray.set_state(TrayState.LISTENING)
         except AudioDeviceError as exc:
             LOGGER.error("Audio device error: %s", exc)
-            self._notify("Microphone Error", str(exc))
+            self._toast_manager.error(str(exc), "Microphone Error")
             self._recording_active = False
             self._tray.set_state(TrayState.ERROR)
             self._schedule_idle_reset()
         except Exception as exc:
             LOGGER.exception("Failed to start audio capture", exc_info=exc)
-            self._notify("Recording Error", "Could not start audio capture")
+            self._toast_manager.error("Could not start audio capture. Please check your microphone.", "Recording Error")
             self._recording_active = False
             self._tray.set_state(TrayState.ERROR)
             self._schedule_idle_reset()
@@ -256,7 +297,7 @@ class AppRuntime:
                 LOGGER.warning(
                     "Audio buffer too short (%.2f s), skipping transcription", duration
                 )
-                self._notify("Recording Too Short", "Please hold the hotkey longer")
+                self._toast_manager.warning("Please hold the hotkey longer to record audio.", "Recording Too Short")
                 self._tray.set_state(TrayState.ERROR)
                 self._schedule_idle_reset()
                 return
@@ -277,7 +318,7 @@ class AppRuntime:
         """Transcribe the audio buffer and copy to clipboard."""
         if self._audio_buffer is None:
             LOGGER.error("No audio buffer to transcribe")
-            self._notify("Transcription Error", "No audio recorded")
+            self._toast_manager.error("No audio recorded. Please try recording again.", "Transcription Error")
             self._tray.set_state(TrayState.ERROR)
             self._schedule_idle_reset()
             return
@@ -319,7 +360,7 @@ class AppRuntime:
                 LOGGER.debug("Text copied to clipboard")
             except Exception as exc:
                 LOGGER.error("Failed to copy to clipboard: %s", exc)
-                self._notify("Clipboard Error", "Could not copy text")
+                self._toast_manager.error("Could not copy text to clipboard.", "Clipboard Error")
                 self._tray.set_state(TrayState.ERROR)
                 self._schedule_idle_reset()
                 return
@@ -333,7 +374,7 @@ class AppRuntime:
                 self._perform_paste()
                 self._tray.set_state(TrayState.PASTED)
 
-            self._notify("Transcribed", f"{cleaned_text[:60]}...")
+            self._toast_manager.success(f"Transcribed: {cleaned_text[:60]}...", "Transcription Complete")
 
             # Record performance metrics
             metrics = get_metrics()
@@ -395,14 +436,12 @@ class AppRuntime:
             else:
                 message = "Remote transcription failed. Check endpoint and network."
 
-            self._notify("Remote Transcription Failed", message)
+            self._toast_manager.error(message, "Remote Transcription Failed")
             self._tray.set_state(TrayState.ERROR)
             self._schedule_idle_reset()
         except Exception as exc:
             LOGGER.exception("Transcription failed", exc_info=exc)
-            self._notify(
-                "Transcription Failed", "Could not transcribe audio. Try again."
-            )
+            self._toast_manager.error("Could not transcribe audio. Try again.", "Transcription Failed")
             self._tray.set_state(TrayState.ERROR)
             self._schedule_idle_reset()
 
@@ -523,16 +562,6 @@ class AppRuntime:
         if timer and timer.is_alive():
             timer.cancel()
 
-    def _notify(self, title: str, message: str) -> None:
-        icon = self._tray.icon
-        if icon:
-            try:
-                icon.notify(message, title)
-                return
-            except Exception:  # pragma: no cover - notification errors are non-critical
-                LOGGER.debug("Tray notification failed", exc_info=True)
-        LOGGER.info("%s: %s", title, message)
-
     def _apply_startup_setting(self, enabled: bool) -> bool:
         try:
             if enabled:
@@ -540,7 +569,7 @@ class AppRuntime:
             else:
                 startup.disable_startup(self._app_name)
         except startup.StartupError as exc:
-            self._notify("Startup", f"Could not update auto-start: {exc}")
+            self._toast_manager.error(f"Could not update auto-start: {exc}", "Startup")
             LOGGER.debug("Startup toggle failed", exc_info=True)
             return False
         return True
