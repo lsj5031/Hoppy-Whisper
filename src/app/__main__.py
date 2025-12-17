@@ -90,6 +90,7 @@ class AppRuntime:
             ),
             start_with_windows=registry_startup,
             show_first_run_tip=not settings.first_run_complete,
+            first_run_hotkey_chord=settings.hotkey_chord,
         )
         callbacks = HotkeyCallbacks(
             on_record_start=self._handle_record_start,
@@ -108,9 +109,20 @@ class AppRuntime:
         """Start the tray icon and hotkey listener."""
         LOGGER.info("Starting Hoppy Whisper runtime")
 
+        transcriber_config_before: tuple[bool, str, str, str] | None = None
+        onboarding_completed = False
+
         # Show onboarding wizard for first-time users
         if not self._settings.first_run_complete:
-            if self._show_onboarding_wizard():
+            transcriber_config_before = (
+                self._settings.remote_transcription_enabled,
+                self._settings.remote_transcription_endpoint,
+                self._settings.remote_transcription_api_key,
+                self._settings.remote_transcription_model,
+            )
+
+            onboarding_completed = self._show_onboarding_wizard()
+            if onboarding_completed:
                 self._toast_manager.success(
                     "Setup completed! Press your hotkey to start transcribing."
                 )
@@ -119,6 +131,54 @@ class AppRuntime:
                 self._toast_manager.info(
                     "You can run setup again from the Settings menu."
                 )
+
+        # Ensure first-run messaging reflects the current settings state.
+        self._tray.configure_first_run_tip(
+            show_first_run_tip=not self._settings.first_run_complete,
+            hotkey_chord=self._settings.hotkey_chord,
+        )
+
+        # Apply any onboarding changes before starting background services.
+        if onboarding_completed:
+            try:
+                self._hotkey.set_paste_window_seconds(
+                    self._settings.paste_window_seconds
+                )
+                self._hotkey.update_chord(self._settings.hotkey_chord)
+            except Exception as exc:
+                LOGGER.exception(
+                    "Failed to apply hotkey settings after onboarding", exc_info=exc
+                )
+                self._toast_manager.error(
+                    "Setup saved but hotkey update failed. Please restart the app.",
+                    "Hotkey Error",
+                )
+
+            if transcriber_config_before is not None:
+                transcriber_config_after = (
+                    self._settings.remote_transcription_enabled,
+                    self._settings.remote_transcription_endpoint,
+                    self._settings.remote_transcription_api_key,
+                    self._settings.remote_transcription_model,
+                )
+                if transcriber_config_after != transcriber_config_before:
+                    try:
+                        self._transcriber = load_transcriber(
+                            remote_enabled=self._settings.remote_transcription_enabled,
+                            remote_endpoint=self._settings.remote_transcription_endpoint,
+                            remote_api_key=self._settings.remote_transcription_api_key,
+                            remote_model=self._settings.remote_transcription_model,
+                        )
+                    except Exception as exc:
+                        LOGGER.exception(
+                            "Failed to reload transcriber after onboarding",
+                            exc_info=exc,
+                        )
+                        self._toast_manager.error(
+                            "Setup saved but transcription reload failed. "
+                            "Please restart the app.",
+                            "Setup Error",
+                        )
 
         self._tray.start()
         self._hotkey.start()

@@ -899,10 +899,11 @@ class SettingsWindow:
 
     def _reset_hotkey(self) -> None:
         """Reset hotkey to default."""
-        self._hotkey_var.set("CTRL+SHIFT+;")
+        default_hotkey = AppSettings().hotkey_chord
+        self._hotkey_var.set(default_hotkey)
         self._hotkey_entry.configure(state="normal")
         self._hotkey_entry.delete(0, "end")
-        self._hotkey_entry.insert(0, "CTRL+SHIFT+;")
+        self._hotkey_entry.insert(0, default_hotkey)
         self._hotkey_entry.configure(state="readonly")
         self._mark_modified()
 
@@ -1111,6 +1112,7 @@ class SettingsWindow:
             "Continue?",
         ):
             self._settings.first_run_complete = False
+            self._settings.save()
             messagebox.showinfo(
                 "Reset Onboarding", "First-run setup will appear on next startup."
             )

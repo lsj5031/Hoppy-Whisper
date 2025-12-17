@@ -214,6 +214,25 @@ class OnboardingWizard:
         self._api_key_var: Optional[ctk.StringVar] = None
         self._model_var: Optional[ctk.StringVar] = None
 
+        # UI widgets (used only while a step is visible)
+        self._hotkey_entry: Optional[ctk.CTkEntry] = None
+        self._endpoint_entry: Optional[ctk.CTkEntry] = None
+        self._api_key_entry: Optional[ctk.CTkEntry] = None
+        self._model_entry: Optional[ctk.CTkEntry] = None
+
+    @staticmethod
+    def _set_entry_text(
+        entry: ctk.CTkEntry, value: str, *, readonly: bool = False
+    ) -> None:
+        """Update an entry's contents (even when read-only)."""
+        if readonly:
+            entry.configure(state="normal")
+        entry.delete(0, "end")
+        if value:
+            entry.insert(0, value)
+        if readonly:
+            entry.configure(state="readonly")
+
     def show(self) -> bool:
         """Show the onboarding wizard. Returns True if completed."""
         if self._is_complete:
@@ -567,6 +586,8 @@ class OnboardingWizard:
             justify="center",
         )
         hotkey_display.pack(fill="x", padx=20, pady=(0, 15))
+        self._hotkey_entry = hotkey_display
+        self._set_entry_text(hotkey_display, self._hotkey_var.get(), readonly=True)
 
         buttons_frame = ctk.CTkFrame(hotkey_frame, fg_color="transparent")
         buttons_frame.pack(fill="x", padx=20, pady=(0, 15))
@@ -699,11 +720,14 @@ class OnboardingWizard:
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w", padx=20, pady=(5, 2))
 
-        ctk.CTkEntry(
+        self._endpoint_entry = ctk.CTkEntry(
             self._remote_settings_frame,
             textvariable=self._endpoint_var,
             placeholder_text="https://api.example.com/transcribe",
-        ).pack(fill="x", padx=20, pady=(0, 10))
+        )
+        self._endpoint_entry.pack(fill="x", padx=20, pady=(0, 10))
+        if self._endpoint_var.get():
+            self._set_entry_text(self._endpoint_entry, self._endpoint_var.get())
 
         # API Key
         ctk.CTkLabel(
@@ -712,12 +736,15 @@ class OnboardingWizard:
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w", padx=20, pady=(5, 2))
 
-        ctk.CTkEntry(
+        self._api_key_entry = ctk.CTkEntry(
             self._remote_settings_frame,
             textvariable=self._api_key_var,
             show="•",
             placeholder_text="Your API key",
-        ).pack(fill="x", padx=20, pady=(0, 10))
+        )
+        self._api_key_entry.pack(fill="x", padx=20, pady=(0, 10))
+        if self._api_key_var.get():
+            self._set_entry_text(self._api_key_entry, self._api_key_var.get())
 
         # Model
         ctk.CTkLabel(
@@ -726,11 +753,14 @@ class OnboardingWizard:
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w", padx=20, pady=(5, 2))
 
-        ctk.CTkEntry(
+        self._model_entry = ctk.CTkEntry(
             self._remote_settings_frame,
             textvariable=self._model_var,
             placeholder_text="whisper-1",
-        ).pack(fill="x", padx=20, pady=(0, 15))
+        )
+        self._model_entry.pack(fill="x", padx=20, pady=(0, 15))
+        if self._model_var.get():
+            self._set_entry_text(self._model_entry, self._model_var.get())
 
         self._on_mode_change()
 
@@ -820,9 +850,18 @@ class OnboardingWizard:
             font=ctk.CTkFont(size=14, weight="bold"),
         ).pack(anchor="w", padx=20, pady=(15, 10))
 
+        hotkey_var = self._hotkey_var
+        transcription_mode = self._transcription_mode
+
+        hotkey_text = self._settings.hotkey_chord
+        if hotkey_var is not None and hotkey_var.get().strip():
+            hotkey_text = hotkey_var.get().strip().upper()
+
         mode_text = "Remote" if self._settings.remote_transcription_enabled else "Local"
+        if transcription_mode is not None:
+            mode_text = "Remote" if transcription_mode.get() == "remote" else "Local"
         summary_items = [
-            ("Hotkey", self._settings.hotkey_chord),
+            ("Hotkey", hotkey_text),
             ("Transcription Mode", mode_text),
             ("Auto-paste", "Enabled" if self._settings.auto_paste else "Disabled"),
         ]
@@ -875,21 +914,25 @@ class OnboardingWizard:
         """Capture a new hotkey chord from the keyboard."""
         root = self._root
         hotkey_var = self._hotkey_var
-        if not root or hotkey_var is None:
+        hotkey_entry = self._hotkey_entry
+        if not root or hotkey_var is None or hotkey_entry is None:
             return
 
         hotkey = capture_hotkey(root, title="Change Hotkey")
         if not hotkey:
             return
 
-        hotkey_var.set(hotkey)
+        hotkey_var.set(hotkey.strip().upper())
+        self._set_entry_text(hotkey_entry, hotkey_var.get(), readonly=True)
 
     def _reset_hotkey(self) -> None:
         """Reset hotkey to default."""
         hotkey_var = self._hotkey_var
-        if hotkey_var is None:
+        hotkey_entry = self._hotkey_entry
+        if hotkey_var is None or hotkey_entry is None:
             return
-        hotkey_var.set("CTRL+SHIFT+;")
+        hotkey_var.set(AppSettings().hotkey_chord)
+        self._set_entry_text(hotkey_entry, hotkey_var.get(), readonly=True)
 
     def _validate_hotkey(self) -> bool:
         """Validate the hotkey configuration."""
@@ -1065,9 +1108,11 @@ class OnboardingWizard:
                 if endpoint_var is None or api_key_var is None or model_var is None:
                     raise RuntimeError("Remote settings controls were not initialized")
 
-                self._settings.remote_transcription_endpoint = endpoint_var.get()
-                self._settings.remote_transcription_api_key = api_key_var.get()
-                self._settings.remote_transcription_model = model_var.get()
+                self._settings.remote_transcription_endpoint = (
+                    endpoint_var.get().strip()
+                )
+                self._settings.remote_transcription_api_key = api_key_var.get().strip()
+                self._settings.remote_transcription_model = model_var.get().strip()
 
             self._settings.first_run_complete = True
             self._settings.save()

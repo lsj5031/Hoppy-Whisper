@@ -9,6 +9,7 @@ from pynput import keyboard
 from app import startup
 from app.hotkey import HotkeyCallbacks, HotkeyManager
 from app.settings import AppSettings
+from app.tray import TrayController, TrayMenuActions
 from app.tray.icons import TrayIconFactory, TrayTheme
 from app.tray.state import TrayState
 
@@ -178,3 +179,26 @@ def test_resolve_startup_command_handles_frozen(
     monkeypatch.setattr(startup.sys, "frozen", False, raising=False)
     cmd_dev = startup.resolve_startup_command()
     assert cmd_dev.endswith("-m app")
+
+
+def test_tray_first_run_message_uses_configured_hotkey() -> None:
+    actions = TrayMenuActions(
+        toggle_recording=lambda: None,
+        show_settings=lambda: None,
+        show_history=lambda: None,
+        restart_app=lambda: None,
+        set_start_with_windows=lambda enabled: None,
+        quit_app=lambda: None,
+    )
+
+    tray = TrayController(
+        app_name="Hoppy Whisper",
+        menu_actions=actions,
+        show_first_run_tip=True,
+        first_run_hotkey_chord="CTRL+ALT+Z",
+    )
+
+    assert "CTRL+ALT+Z" in tray._build_first_run_message()
+
+    tray.configure_first_run_tip(show_first_run_tip=True, hotkey_chord="CTRL+SHIFT+H")
+    assert "CTRL+SHIFT+H" in tray._build_first_run_message()

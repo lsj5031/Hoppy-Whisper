@@ -28,7 +28,9 @@ class AppSettings:
     idle_reset_delay_ms: float = 1600.0
     # Remote transcription settings
     remote_transcription_enabled: bool = True
-    remote_transcription_endpoint: str = "http://localhost:18000/v1/audio/transcriptions"
+    remote_transcription_endpoint: str = (
+        "http://localhost:18000/v1/audio/transcriptions"
+    )
     remote_transcription_api_key: str = ""
     remote_transcription_model: str = "glm-nano-2512"
 

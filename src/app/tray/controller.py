@@ -34,9 +34,8 @@ class TrayController:
     """Manage the tray icon lifecycle, menu, and state transitions."""
 
     FIRST_RUN_TITLE = "Hoppy Whisper"
-    FIRST_RUN_MESSAGE = (
-        "Press Ctrl+Shift+; to start recording. "
-        "Hold to capture speech, release to stop."
+    FIRST_RUN_MESSAGE_TEMPLATE = (
+        "Press {hotkey} to start recording. " "Hold to capture speech, release to stop."
     )
 
     def __init__(
@@ -48,6 +47,7 @@ class TrayController:
         theme: Optional[TrayTheme] = None,
         start_with_windows: bool = False,
         show_first_run_tip: bool = False,
+        first_run_hotkey_chord: str = "CTRL+SHIFT+;",
     ) -> None:
         self._app_name = app_name
         self._menu_actions = menu_actions
@@ -62,6 +62,18 @@ class TrayController:
         self._current_frame = 0
         self._start_with_windows = start_with_windows
         self._show_first_run_tip = show_first_run_tip
+        self._first_run_hotkey_chord = first_run_hotkey_chord
+
+    def configure_first_run_tip(
+        self, *, show_first_run_tip: bool, hotkey_chord: str
+    ) -> None:
+        """Update first-run tip visibility and text."""
+        self._show_first_run_tip = show_first_run_tip
+        self._first_run_hotkey_chord = hotkey_chord
+
+    def _build_first_run_message(self) -> str:
+        hotkey = self._first_run_hotkey_chord.strip() or "CTRL+SHIFT+;"
+        return self.FIRST_RUN_MESSAGE_TEMPLATE.format(hotkey=hotkey)
 
     @property
     def icon(self) -> Optional["pystray.Icon"]:
@@ -88,7 +100,7 @@ class TrayController:
         self._icon = icon
         if self._show_first_run_tip:
             # Notify after the icon is visible to avoid lost toasts.
-            icon.notify(self.FIRST_RUN_MESSAGE, self.FIRST_RUN_TITLE)
+            icon.notify(self._build_first_run_message(), self.FIRST_RUN_TITLE)
             self._show_first_run_tip = False
         threading.Thread(target=icon.run, daemon=True).start()
 
