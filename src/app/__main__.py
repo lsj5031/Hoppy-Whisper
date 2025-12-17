@@ -204,16 +204,41 @@ class AppRuntime:
         """Handle settings changes applied through the settings window."""
         self._toast_manager.success("Settings saved successfully.", "Configuration")
 
+        # Update startup registry if setting changed
+        registry_state = self._probe_startup_state()
+        if registry_state != self._settings.start_with_windows:
+            self._apply_startup_setting(self._settings.start_with_windows)
+
         # Restart hotkey with new settings
+        previous_chord = self._hotkey.chord
+        previous_paste_window = self._hotkey.paste_window_seconds
+
+        def restore_previous_hotkey() -> None:
+            try:
+                self._hotkey.set_paste_window_seconds(previous_paste_window)
+                self._hotkey.update_chord(previous_chord)
+                self._hotkey.start()
+            except Exception:
+                LOGGER.exception(
+                    "Failed to restore previous hotkey after settings update error"
+                )
+
         try:
             self._hotkey.stop()
+            self._hotkey.set_paste_window_seconds(self._settings.paste_window_seconds)
+            self._hotkey.update_chord(self._settings.hotkey_chord)
             self._hotkey.start()
+        except HotkeyInUseError as exc:
+            LOGGER.error("Requested hotkey is already registered: %s", exc)
+            self._toast_manager.error(str(exc), "Hotkey Error")
+            restore_previous_hotkey()
         except Exception as exc:
             LOGGER.error("Failed to restart hotkey after settings change: %s", exc)
             self._toast_manager.error(
                 "Settings saved but hotkey restart failed. Please restart app.",
                 "Hotkey Error",
             )
+            restore_previous_hotkey()
 
     def _on_onboarding_complete(self) -> None:
         """Handle onboarding completion."""
@@ -346,7 +371,10 @@ class AppRuntime:
             self._transcribe_timer.start()
         except Exception as exc:
             LOGGER.exception("Failed to stop audio capture", exc_info=exc)
-            self._notify("Recording Error", "Could not complete audio capture")
+            self._toast_manager.error(
+                "Could not complete audio capture.",
+                "Recording Error",
+            )
             self._tray.set_state(TrayState.ERROR)
             self._schedule_idle_reset()
 
@@ -525,7 +553,7 @@ class AppRuntime:
                 LOGGER.info("Paste command sent (Ctrl+V)")
         except Exception as exc:
             LOGGER.error("Failed to perform paste: %s", exc)
-            self._notify("Paste Error", "Could not paste text")
+            self._toast_manager.error("Could not paste text.", "Paste Error")
 
     # --- VAD integration -------------------------------------------------
 
@@ -638,10 +666,10 @@ class AppRuntime:
             import subprocess
 
             subprocess.Popen(self._startup_command, shell=True)
-            self._notify("Restart", "Restarting Hoppy Whisper...")
+            self._toast_manager.info("Restarting Hoppy Whisper...", "Restart")
         except Exception as exc:
             LOGGER.exception("Failed to restart application", exc_info=exc)
-            self._notify("Restart", "Could not restart the application.")
+            self._toast_manager.error("Could not restart the application.", "Restart")
             return
         # Stop current runtime; main() will exit afterward
         self.stop()
@@ -827,23 +855,26 @@ def main() -> int:
             LOGGER.info("Transcriber ready (provider: %s)", transcriber.provider)
     except Exception as exc:
         LOGGER.exception("Failed to load transcriber", exc_info=exc)
-        
+
         # If remote transcription failed, show onboarding wizard to let them reconfigure
         # (regardless of first_run_complete status if config is invalid)
         is_remote_config_invalid = (
-            settings.remote_transcription_enabled 
+            settings.remote_transcription_enabled
             and not settings.remote_transcription_endpoint
         )
-        if is_remote_config_invalid or (settings.remote_transcription_enabled and not settings.first_run_complete):
+        if is_remote_config_invalid or (
+            settings.remote_transcription_enabled and not settings.first_run_complete
+        ):
             LOGGER.info(
-                "Remote transcription failed and first_run incomplete; showing onboarding"
+                "Remote transcription failed and first_run incomplete; "
+                "showing onboarding"
             )
             max_retries = 3
             for attempt in range(max_retries):
                 try:
                     onboarding = OnboardingWizard(settings)
                     if onboarding.show():
-                        # Onboarding completed; retry loading transcriber with new settings
+                        # Onboarding completed; retry loading transcriber.
                         try:
                             transcriber = load_transcriber(
                                 remote_enabled=settings.remote_transcription_enabled,
@@ -851,18 +882,23 @@ def main() -> int:
                                 remote_api_key=settings.remote_transcription_api_key,
                                 remote_model=settings.remote_transcription_model,
                             )
-                            LOGGER.info("Transcriber loaded successfully after onboarding")
+                            LOGGER.info(
+                                "Transcriber loaded successfully after onboarding"
+                            )
                             break  # Success!
                         except Exception as retry_exc:
                             LOGGER.warning(
-                                "Transcriber failed after onboarding (attempt %d/%d): %s",
+                                "Transcriber failed after onboarding "
+                                "(attempt %d/%d): %s",
                                 attempt + 1,
                                 max_retries,
                                 retry_exc,
                             )
                             if attempt < max_retries - 1:
                                 # Show onboarding again to let user fix config
-                                LOGGER.info("Bringing user back to onboarding to fix config")
+                                LOGGER.info(
+                                    "Bringing user back to onboarding to fix config"
+                                )
                                 continue
                             else:
                                 # Final attempt failed
@@ -876,7 +912,9 @@ def main() -> int:
                         LOGGER.info("User cancelled onboarding")
                         return 1
                 except Exception as onboard_exc:
-                    LOGGER.exception("Failed to show onboarding wizard", exc_info=onboard_exc)
+                    LOGGER.exception(
+                        "Failed to show onboarding wizard", exc_info=onboard_exc
+                    )
                     show_error_dialog(
                         "Setup wizard failed. "
                         "Please check your configuration and try again."

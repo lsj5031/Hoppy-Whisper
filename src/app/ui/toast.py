@@ -258,11 +258,14 @@ class Toast:
         self._is_visible = False
 
         if self._auto_destroy_after_id:
-            try:
-                self._root.after_cancel(self._auto_destroy_after_id)
-            except Exception:
-                pass
+            after_id = self._auto_destroy_after_id
             self._auto_destroy_after_id = None
+            root = self._root
+            if root:
+                try:
+                    root.after_cancel(after_id)
+                except Exception:
+                    pass
 
         if self._root:
             try:

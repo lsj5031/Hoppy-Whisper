@@ -7,14 +7,124 @@ import logging
 import sys
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Optional
 
 import customtkinter as ctk
 
+from app.hotkey import (
+    HotkeyInUseError,
+    HotkeyParseError,
+    HotkeyRegistrationError,
+    ensure_hotkey_available,
+    parse_hotkey,
+)
 from app.settings import AppSettings
 from app.transcriber import load_transcriber
+from app.ui.hotkey_capture import capture_hotkey
 
 LOGGER = logging.getLogger("hoppy_whisper.onboarding")
+
+
+def _get_icon_path() -> Optional[Path]:
+    """Get the path to the application icon."""
+    # Try relative to this file first (development)
+    base = Path(__file__).resolve().parent.parent.parent.parent
+    icon_path = base / "icos" / "BunnyStandby.ico"
+    if icon_path.exists():
+        return icon_path
+
+    # PyInstaller (onefile extracts datas under sys._MEIPASS; onedir keeps next to exe)
+    if getattr(sys, "frozen", False):
+        if hasattr(sys, "_MEIPASS"):
+            icon_path = Path(sys._MEIPASS) / "icos" / "BunnyStandby.ico"
+            if icon_path.exists():
+                return icon_path
+
+        icon_path = Path(sys.executable).parent / "icos" / "BunnyStandby.ico"
+        if icon_path.exists():
+            return icon_path
+    return None
+
+
+class _CustomInputDialog(ctk.CTkToplevel):
+    """Custom input dialog with app icon support."""
+
+    def __init__(
+        self,
+        parent: ctk.CTk,
+        title: str = "Input",
+        text: str = "Enter value:",
+    ):
+        super().__init__(parent)
+        self.title(title)
+        self.geometry("300x180")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+
+        self._result: Optional[str] = None
+
+        # Set window icon (must be done after window is mapped)
+        def _set_icon():
+            icon_path = _get_icon_path()
+            if icon_path:
+                try:
+                    self.iconbitmap(str(icon_path))
+                except Exception:
+                    pass
+
+        self.after(50, _set_icon)
+
+        # Label
+        ctk.CTkLabel(self, text=text, wraplength=260).pack(pady=(20, 10), padx=20)
+
+        # Entry
+        self._entry = ctk.CTkEntry(self, width=260)
+        self._entry.pack(pady=10, padx=20)
+        self._entry.focus()
+
+        # Buttons frame
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(pady=(10, 20))
+
+        ctk.CTkButton(btn_frame, text="OK", width=80, command=self._on_ok).pack(
+            side="left", padx=5
+        )
+        ctk.CTkButton(
+            btn_frame,
+            text="Cancel",
+            width=80,
+            fg_color="transparent",
+            border_width=1,
+            text_color=("gray10", "gray90"),
+            command=self._on_cancel,
+        ).pack(side="left", padx=5)
+
+        self._entry.bind("<Return>", lambda e: self._on_ok())
+        self._entry.bind("<Escape>", lambda e: self._on_cancel())
+        self.protocol("WM_DELETE_WINDOW", self._on_cancel)
+
+        # Center on parent
+        self.update_idletasks()
+        px = parent.winfo_x() + (parent.winfo_width() // 2) - (self.winfo_width() // 2)
+        py = (
+            parent.winfo_y() + (parent.winfo_height() // 2) - (self.winfo_height() // 2)
+        )
+        self.geometry(f"+{px}+{py}")
+
+    def _on_ok(self) -> None:
+        self._result = self._entry.get()
+        self.destroy()
+
+    def _on_cancel(self) -> None:
+        self._result = None
+        self.destroy()
+
+    def get_input(self) -> Optional[str]:
+        """Show dialog and return entered value or None if cancelled."""
+        self.wait_window()
+        return self._result
 
 
 def get_windows_dpi_scale() -> float:
@@ -134,6 +244,17 @@ class OnboardingWizard:
         self._root = ctk.CTk()
         self._root.title("Hoppy Whisper Setup")
 
+        # Set window icon (use after() to ensure it overrides customtkinter default)
+        def _set_icon():
+            icon_path = _get_icon_path()
+            if icon_path:
+                try:
+                    self._root.iconbitmap(str(icon_path))
+                except Exception:
+                    pass
+
+        self._root.after(10, _set_icon)
+
         # Target dimensions we want on screen (at any DPI)
         # Divide by DPI scale to compensate for system scaling
         target_width = 680
@@ -159,7 +280,7 @@ class OnboardingWizard:
 
         self._main_frame = ctk.CTkFrame(self._root, fg_color="transparent")
         self._main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
-        self._main_frame.grid_rowconfigure(2, weight=1)  # Content frame gets extra space
+        self._main_frame.grid_rowconfigure(2, weight=1)  # Content frame expands
         self._main_frame.grid_columnconfigure(0, weight=1)
 
         # Header
@@ -349,9 +470,13 @@ class OnboardingWizard:
 
         if step_index == len(self._steps) - 1:
             self._next_button.pack_forget()
+            self._back_button.pack_forget()
+            self._back_button.pack(side="left", padx=(10, 0))
             self._finish_button.pack(side="right")
         else:
             self._finish_button.pack_forget()
+            self._back_button.pack_forget()
+            self._back_button.pack(side="right", padx=(0, 10))
             self._next_button.pack(side="right", padx=(0, 10))
 
         self._update_step_indicator()
@@ -515,7 +640,7 @@ class OnboardingWizard:
             local_frame,
             variable=self._transcription_mode,
             value="local",
-            text="Local Transcription (Recommended)",
+            text="Local Transcription",
             font=ctk.CTkFont(size=14, weight="bold"),
             command=self._on_mode_change,
         )
@@ -537,7 +662,7 @@ class OnboardingWizard:
             remote_frame,
             variable=self._transcription_mode,
             value="remote",
-            text="Remote Transcription",
+            text="Remote Transcription (Recommended)",
             font=ctk.CTkFont(size=14, weight="bold"),
             command=self._on_mode_change,
         )
@@ -611,7 +736,11 @@ class OnboardingWizard:
 
     def _on_mode_change(self) -> None:
         """Handle transcription mode change."""
-        if self._transcription_mode.get() == "remote":
+        mode_var = self._transcription_mode
+        if mode_var is None:
+            return
+
+        if mode_var.get() == "remote":
             self._remote_settings_frame.pack(fill="x", pady=10)
         else:
             self._remote_settings_frame.pack_forget()
@@ -743,36 +872,68 @@ class OnboardingWizard:
         ctk.CTkLabel(quickstart_frame, text="").pack(pady=5)
 
     def _change_hotkey(self) -> None:
-        """Change the hotkey through a dialog."""
-        dialog = ctk.CTkInputDialog(
-            text="Enter new hotkey combination:\n\nExample: CTRL+SHIFT+H",
-            title="Change Hotkey",
-        )
-        new_hotkey = dialog.get_input()
+        """Capture a new hotkey chord from the keyboard."""
+        root = self._root
+        hotkey_var = self._hotkey_var
+        if not root or hotkey_var is None:
+            return
 
-        if new_hotkey and new_hotkey.strip():
-            hotkey = new_hotkey.strip().upper()
-            if "+" in hotkey and len(hotkey) > 3:
-                self._hotkey_var.set(hotkey)
+        hotkey = capture_hotkey(root, title="Change Hotkey")
+        if not hotkey:
+            return
+
+        hotkey_var.set(hotkey)
 
     def _reset_hotkey(self) -> None:
         """Reset hotkey to default."""
-        self._hotkey_var.set("CTRL+SHIFT+;")
+        hotkey_var = self._hotkey_var
+        if hotkey_var is None:
+            return
+        hotkey_var.set("CTRL+SHIFT+;")
 
     def _validate_hotkey(self) -> bool:
         """Validate the hotkey configuration."""
         from tkinter import messagebox
 
-        hotkey = self._hotkey_var.get()
-        if not hotkey or "+" not in hotkey:
-            messagebox.showerror(
-                "Invalid Hotkey", "Please enter a valid hotkey combination."
-            )
+        hotkey_var = self._hotkey_var
+        if hotkey_var is None:
+            return False
+
+        try:
+            hotkey = hotkey_var.get().strip().upper()
+            chord = parse_hotkey(hotkey)
+            if chord.modifier_mask == 0:
+                raise HotkeyParseError(
+                    "Hotkey must include at least one modifier (Ctrl/Shift/Alt/Win)"
+                )
+            ensure_hotkey_available(chord)
+        except HotkeyInUseError as exc:
+            messagebox.showerror("Hotkey Unavailable", str(exc))
+            return False
+        except HotkeyParseError as exc:
+            messagebox.showerror("Invalid Hotkey", str(exc))
+            return False
+        except HotkeyRegistrationError as exc:
+            messagebox.showerror("Hotkey Error", str(exc))
             return False
         return True
 
     def _run_test(self) -> None:
         """Run a test of the transcription setup."""
+        root = self._root
+        transcription_mode = self._transcription_mode
+        endpoint_var = self._endpoint_var
+        api_key_var = self._api_key_var
+        model_var = self._model_var
+        if (
+            root is None
+            or transcription_mode is None
+            or endpoint_var is None
+            or api_key_var is None
+            or model_var is None
+        ):
+            return
+
         self._test_button.configure(state="disabled", text="Testing...")
         self._test_status_var.set("Running tests...")
 
@@ -787,27 +948,25 @@ class OnboardingWizard:
                 self._test_textbox.see("end")
                 self._test_textbox.configure(state="disabled")
 
-            self._root.after(0, update)
+            root.after(0, update)
 
         def run_test_thread():
             try:
                 update_details("Testing transcription setup...")
-                mode = self._transcription_mode.get()
+                mode = transcription_mode.get()
                 update_details(f"Mode: {mode} transcription")
 
                 if mode == "remote":
-                    endpoint = self._endpoint_var.get()
+                    endpoint = endpoint_var.get()
                     if not endpoint:
                         update_details("❌ Remote mode requires endpoint URL")
-                        self._root.after(
+                        root.after(
                             0,
                             lambda: self._test_button.configure(
                                 state="normal", text="Run Test"
                             ),
                         )
-                        self._root.after(
-                            0, lambda: self._test_status_var.set("Test failed")
-                        )
+                        root.after(0, lambda: self._test_status_var.set("Test failed"))
                         return
 
                     update_details(f"Endpoint: {endpoint}")
@@ -815,21 +974,19 @@ class OnboardingWizard:
                         load_transcriber(
                             remote_enabled=True,
                             remote_endpoint=endpoint,
-                            remote_api_key=self._api_key_var.get(),
-                            remote_model=self._model_var.get(),
+                            remote_api_key=api_key_var.get(),
+                            remote_model=model_var.get(),
                         )
                         update_details("✅ Remote transcriber initialized")
                     except Exception as e:
                         update_details(f"❌ Failed: {e}")
-                        self._root.after(
+                        root.after(
                             0,
                             lambda: self._test_button.configure(
                                 state="normal", text="Run Test"
                             ),
                         )
-                        self._root.after(
-                            0, lambda: self._test_status_var.set("Test failed")
-                        )
+                        root.after(0, lambda: self._test_status_var.set("Test failed"))
                         return
                 else:
                     try:
@@ -838,27 +995,23 @@ class OnboardingWizard:
                         update_details(f"Provider: {transcriber.provider}")
                     except Exception as e:
                         update_details(f"❌ Failed: {e}")
-                        self._root.after(
+                        root.after(
                             0,
                             lambda: self._test_button.configure(
                                 state="normal", text="Run Test"
                             ),
                         )
-                        self._root.after(
-                            0, lambda: self._test_status_var.set("Test failed")
-                        )
+                        root.after(0, lambda: self._test_status_var.set("Test failed"))
                         return
 
                 update_details("✅ All tests passed!")
-                self._root.after(
-                    0, lambda: self._test_status_var.set("All tests passed")
-                )
+                root.after(0, lambda: self._test_status_var.set("All tests passed"))
 
             except Exception as e:
                 update_details(f"❌ Test failed: {e}")
-                self._root.after(0, lambda: self._test_status_var.set("Test failed"))
+                root.after(0, lambda: self._test_status_var.set("Test failed"))
             finally:
-                self._root.after(
+                root.after(
                     0,
                     lambda: self._test_button.configure(
                         state="normal", text="Run Test"
@@ -895,15 +1048,26 @@ class OnboardingWizard:
 
     def _on_finish(self) -> None:
         """Handle finish button click."""
-        try:
-            self._settings.hotkey_chord = self._hotkey_var.get()
+        hotkey_var = self._hotkey_var
+        transcription_mode = self._transcription_mode
+        if hotkey_var is None or transcription_mode is None:
+            return
 
-            mode = self._transcription_mode.get()
+        try:
+            self._settings.hotkey_chord = hotkey_var.get().strip().upper()
+
+            mode = transcription_mode.get()
             self._settings.remote_transcription_enabled = mode == "remote"
             if mode == "remote":
-                self._settings.remote_transcription_endpoint = self._endpoint_var.get()
-                self._settings.remote_transcription_api_key = self._api_key_var.get()
-                self._settings.remote_transcription_model = self._model_var.get()
+                endpoint_var = self._endpoint_var
+                api_key_var = self._api_key_var
+                model_var = self._model_var
+                if endpoint_var is None or api_key_var is None or model_var is None:
+                    raise RuntimeError("Remote settings controls were not initialized")
+
+                self._settings.remote_transcription_endpoint = endpoint_var.get()
+                self._settings.remote_transcription_api_key = api_key_var.get()
+                self._settings.remote_transcription_model = model_var.get()
 
             self._settings.first_run_complete = True
             self._settings.save()

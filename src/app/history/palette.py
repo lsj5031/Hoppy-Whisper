@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import ctypes
 import datetime
 import json
 import logging
+import sys
 import threading
+from pathlib import Path
 from tkinter import filedialog, messagebox
 from typing import Callable, Optional
 
@@ -14,6 +17,73 @@ import customtkinter as ctk
 from .dao import HistoryDAO, Utterance
 
 LOGGER = logging.getLogger("hoppy_whisper.history")
+
+
+def _get_icon_path() -> Optional[Path]:
+    """Get the path to the application icon."""
+    # Try relative to this file first (development)
+    base = Path(__file__).resolve().parent.parent.parent.parent
+    icon_path = base / "icos" / "BunnyStandby.ico"
+    if icon_path.exists():
+        return icon_path
+
+    # PyInstaller (onefile extracts datas under sys._MEIPASS; onedir keeps next to exe)
+    if getattr(sys, "frozen", False):
+        if hasattr(sys, "_MEIPASS"):
+            icon_path = Path(sys._MEIPASS) / "icos" / "BunnyStandby.ico"
+            if icon_path.exists():
+                return icon_path
+
+        icon_path = Path(sys.executable).parent / "icos" / "BunnyStandby.ico"
+        if icon_path.exists():
+            return icon_path
+    return None
+
+
+def get_windows_dpi_scale() -> float:
+    """Get the Windows DPI scale factor using the Windows API.
+
+    Returns a scale factor (1.0 = 100%, 1.5 = 150%, 2.0 = 200%).
+    Falls back to 1.0 if detection fails or not on Windows.
+    """
+    if sys.platform != "win32":
+        return 1.0
+
+    try:
+        # Set DPI awareness to per-monitor aware (Windows 8.1+)
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except (AttributeError, OSError):
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except (AttributeError, OSError):
+                pass
+
+        dpi = 96  # Default standard DPI
+
+        # Method 1: GetDpiForSystem (Windows 10 1607+)
+        try:
+            dpi = ctypes.windll.user32.GetDpiForSystem()
+        except (AttributeError, OSError):
+            pass
+
+        # Method 2: GetDeviceCaps if Method 1 failed
+        if dpi == 96:
+            try:
+                hdc = ctypes.windll.user32.GetDC(0)
+                if hdc:
+                    dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)
+                    ctypes.windll.user32.ReleaseDC(0, hdc)
+            except (AttributeError, OSError):
+                pass
+
+        scale = dpi / 96.0
+        LOGGER.debug("Detected Windows DPI: %d, scale factor: %.2f", dpi, scale)
+        return scale
+
+    except Exception as e:
+        LOGGER.warning("Failed to detect Windows DPI scale: %s", e)
+        return 1.0
 
 
 class HistoryPalette:
@@ -32,6 +102,7 @@ class HistoryPalette:
         self._on_paste = on_paste
         self._root: Optional[ctk.CTk] = None
         self._search_var: Optional[ctk.StringVar] = None
+        self._search_entry: Optional[ctk.CTkEntry] = None
         self._results_frame: Optional[ctk.CTkScrollableFrame] = None
         self._status_label: Optional[ctk.CTkLabel] = None
         self._current_results: list[Utterance] = []
@@ -40,6 +111,7 @@ class HistoryPalette:
         # Background search state
         self._search_thread: Optional[threading.Thread] = None
         self._search_cancelled = False
+        self._search_debounce_id: Optional[str] = None
 
     def show(self) -> None:
         """Open the history palette window."""
@@ -55,14 +127,51 @@ class HistoryPalette:
 
     def _create_window(self) -> None:
         """Create the palette window and widgets."""
+        # Detect DPI scale factor
+        dpi_scale = get_windows_dpi_scale()
+
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
+        # Reset customtkinter scaling to 1.0 to prevent double-scaling
+        ctk.set_widget_scaling(1.0)
+        ctk.set_window_scaling(1.0)
+
         self._root = ctk.CTk()
         self._root.title("Hoppy Whisper History")
-        self._root.geometry("750x550")
+
+        # Set window icon (use after() to ensure it overrides customtkinter default)
+        def _set_icon() -> None:
+            root = self._root
+            if not root:
+                return
+            icon_path = _get_icon_path()
+            if icon_path:
+                try:
+                    root.iconbitmap(str(icon_path))
+                    try:
+                        root.iconbitmap(default=str(icon_path))
+                    except Exception:
+                        pass
+                except Exception:
+                    LOGGER.debug("Failed to set history window icon", exc_info=True)
+
+        self._root.after(10, _set_icon)
+
+        # Target dimensions we want on screen (at any DPI)
+        # Divide by DPI scale to compensate for system scaling
+        target_width = 750
+        target_height = 550
+        min_width = 500
+        min_height = 400
+        actual_width = int(target_width / dpi_scale)
+        actual_height = int(target_height / dpi_scale)
+        actual_min_width = int(min_width / dpi_scale)
+        actual_min_height = int(min_height / dpi_scale)
+
+        self._root.geometry(f"{actual_width}x{actual_height}")
         self._root.resizable(True, True)
-        self._root.minsize(500, 400)
+        self._root.minsize(actual_min_width, actual_min_height)
 
         # Main container
         main_frame = ctk.CTkFrame(self._root, fg_color="transparent")
@@ -87,17 +196,17 @@ class HistoryPalette:
         search_frame.grid(row=0, column=0, sticky="e")
 
         self._search_var = ctk.StringVar()
-        self._search_var.trace_add("write", self._on_search_change)
 
-        search_entry = ctk.CTkEntry(
+        self._search_entry = ctk.CTkEntry(
             search_frame,
             textvariable=self._search_var,
             placeholder_text="Search transcriptions...",
             width=250,
             height=36,
         )
-        search_entry.grid(row=0, column=0)
-        search_entry.focus_set()
+        self._search_entry.grid(row=0, column=0)
+        self._search_entry.focus_set()
+        self._search_entry.bind("<KeyRelease>", self._on_search_key)
 
         # Results frame (scrollable)
         results_container = ctk.CTkFrame(main_frame, corner_radius=12)
@@ -185,12 +294,22 @@ class HistoryPalette:
             LOGGER.error("Failed to load recent utterances: %s", exc)
             self._update_status("Error loading history")
 
+    def _on_search_key(self, event: object = None) -> None:
+        """Handle key release in search entry with debouncing."""
+        # Cancel previous debounce timer
+        if self._search_debounce_id and self._root:
+            self._root.after_cancel(self._search_debounce_id)
+
+        # Debounce: wait 200ms after last keystroke before searching
+        if self._root:
+            self._search_debounce_id = self._root.after(200, self._on_search_change)
+
     def _on_search_change(self, *_: object) -> None:
         """Handle search text changes with non-blocking background search."""
-        if not self._search_var:
+        if not self._search_entry:
             return
 
-        query = self._search_var.get().strip()
+        query = self._search_entry.get().strip()
         self._search_cancelled = True
 
         if not query:
@@ -201,13 +320,9 @@ class HistoryPalette:
             """Run search in background thread."""
             try:
                 results = self._dao.search(query, limit=50)
-                if (
-                    self._root
-                    and self._root.winfo_exists()
-                    and not self._search_cancelled
-                ):
+                if self._root and self._root.winfo_exists():
                     self._root.after(
-                        0, lambda: self._update_search_results(results, query)
+                        0, lambda r=results, q=query: self._update_search_results(r, q)
                     )
             except Exception as exc:
                 LOGGER.error("Background search failed: %s", exc)
@@ -220,9 +335,10 @@ class HistoryPalette:
 
     def _update_search_results(self, results: list[Utterance], query: str) -> None:
         """Update UI with search results. Called on main thread."""
-        if self._search_cancelled or not self._search_var:
+        if not self._search_entry:
             return
-        if self._search_var.get().strip() != query:
+        current_query = self._search_entry.get().strip()
+        if current_query != query:
             return
         self._current_results = results
         self._update_results()

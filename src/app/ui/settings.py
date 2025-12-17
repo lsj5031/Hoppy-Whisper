@@ -2,16 +2,184 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 import logging
+import sys
+from pathlib import Path
 from tkinter import filedialog, messagebox
 from typing import Callable, Optional
 
 import customtkinter as ctk
 
+from app.hotkey import (
+    HotkeyInUseError,
+    HotkeyParseError,
+    HotkeyRegistrationError,
+    ensure_hotkey_available,
+    parse_hotkey,
+)
 from app.settings import AppSettings
+from app.ui.hotkey_capture import capture_hotkey
 
 LOGGER = logging.getLogger("hoppy_whisper.settings")
+
+
+def _get_icon_path() -> Optional[Path]:
+    """Get the path to the application icon."""
+    # Try relative to this file first (development)
+    base = Path(__file__).resolve().parent.parent.parent.parent
+    icon_path = base / "icos" / "BunnyStandby.ico"
+    if icon_path.exists():
+        return icon_path
+
+    # PyInstaller (onefile extracts datas under sys._MEIPASS; onedir keeps next to exe)
+    if getattr(sys, "frozen", False):
+        if hasattr(sys, "_MEIPASS"):
+            icon_path = Path(sys._MEIPASS) / "icos" / "BunnyStandby.ico"
+            if icon_path.exists():
+                return icon_path
+
+        icon_path = Path(sys.executable).parent / "icos" / "BunnyStandby.ico"
+        if icon_path.exists():
+            return icon_path
+    return None
+
+
+class _CustomInputDialog(ctk.CTkToplevel):
+    """Custom input dialog with app icon support."""
+
+    def __init__(
+        self,
+        parent: ctk.CTk,
+        title: str = "Input",
+        text: str = "Enter value:",
+    ):
+        super().__init__(parent)
+        self.title(title)
+        self.geometry("300x180")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+
+        self._result: Optional[str] = None
+
+        # Set window icon (must be done after window is mapped)
+        def _set_icon():
+            icon_path = _get_icon_path()
+            if icon_path:
+                try:
+                    self.iconbitmap(str(icon_path))
+                except Exception:
+                    pass
+
+        self.after(50, _set_icon)
+
+        # Label
+        ctk.CTkLabel(self, text=text, wraplength=260).pack(pady=(20, 10), padx=20)
+
+        # Entry
+        self._entry = ctk.CTkEntry(self, width=260)
+        self._entry.pack(pady=10, padx=20)
+        self._entry.focus()
+
+        # Buttons frame
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(pady=(10, 20))
+
+        ctk.CTkButton(btn_frame, text="OK", width=80, command=self._on_ok).pack(
+            side="left", padx=5
+        )
+        ctk.CTkButton(
+            btn_frame,
+            text="Cancel",
+            width=80,
+            fg_color="transparent",
+            border_width=1,
+            text_color=("gray10", "gray90"),
+            command=self._on_cancel,
+        ).pack(side="left", padx=5)
+
+        self._entry.bind("<Return>", lambda e: self._on_ok())
+        self._entry.bind("<Escape>", lambda e: self._on_cancel())
+        self.protocol("WM_DELETE_WINDOW", self._on_cancel)
+
+        # Center on parent
+        self.update_idletasks()
+        px = parent.winfo_x() + (parent.winfo_width() // 2) - (self.winfo_width() // 2)
+        py = (
+            parent.winfo_y() + (parent.winfo_height() // 2) - (self.winfo_height() // 2)
+        )
+        self.geometry(f"+{px}+{py}")
+
+    def _on_ok(self) -> None:
+        self._result = self._entry.get()
+        self.destroy()
+
+    def _on_cancel(self) -> None:
+        self._result = None
+        self.destroy()
+
+    def get_input(self) -> Optional[str]:
+        """Show dialog and return entered value or None if cancelled."""
+        self.wait_window()
+        return self._result
+
+
+def _get_version() -> str:
+    """Get the application version."""
+    try:
+        from importlib.metadata import version
+
+        return version("hoppy-whisper")
+    except Exception:
+        return "1.1.0"
+
+
+def get_windows_dpi_scale() -> float:
+    """Get the Windows DPI scale factor using the Windows API.
+
+    Returns a scale factor (1.0 = 100%, 1.5 = 150%, 2.0 = 200%).
+    Falls back to 1.0 if detection fails or not on Windows.
+    """
+    if sys.platform != "win32":
+        return 1.0
+
+    try:
+        # Set DPI awareness to per-monitor aware (Windows 8.1+)
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except (AttributeError, OSError):
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except (AttributeError, OSError):
+                pass
+
+        dpi = 96  # Default standard DPI
+
+        # Method 1: GetDpiForSystem (Windows 10 1607+)
+        try:
+            dpi = ctypes.windll.user32.GetDpiForSystem()
+        except (AttributeError, OSError):
+            pass
+
+        # Method 2: GetDeviceCaps if Method 1 failed
+        if dpi == 96:
+            try:
+                hdc = ctypes.windll.user32.GetDC(0)
+                if hdc:
+                    dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)
+                    ctypes.windll.user32.ReleaseDC(0, hdc)
+            except (AttributeError, OSError):
+                pass
+
+        scale = dpi / 96.0
+        LOGGER.debug("Detected Windows DPI: %d, scale factor: %.2f", dpi, scale)
+        return scale
+
+    except Exception as e:
+        LOGGER.warning("Failed to detect Windows DPI scale: %s", e)
+        return 1.0
 
 
 class SettingsWindow:
@@ -49,14 +217,51 @@ class SettingsWindow:
 
     def _create_window(self) -> None:
         """Create the settings window."""
+        # Detect DPI scale factor
+        dpi_scale = get_windows_dpi_scale()
+
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
+        # Reset customtkinter scaling to 1.0 to prevent double-scaling
+        ctk.set_widget_scaling(1.0)
+        ctk.set_window_scaling(1.0)
+
         self._root = ctk.CTk()
         self._root.title("Hoppy Whisper Settings")
-        self._root.geometry("750x650")
+
+        # Set window icon (use after() to ensure it overrides customtkinter default)
+        def _set_icon() -> None:
+            root = self._root
+            if not root:
+                return
+            icon_path = _get_icon_path()
+            if icon_path:
+                try:
+                    root.iconbitmap(str(icon_path))
+                    try:
+                        root.iconbitmap(default=str(icon_path))
+                    except Exception:
+                        pass
+                except Exception:
+                    LOGGER.debug("Failed to set settings window icon", exc_info=True)
+
+        self._root.after(10, _set_icon)
+
+        # Target dimensions we want on screen (at any DPI)
+        # Divide by DPI scale to compensate for system scaling
+        target_width = 750
+        target_height = 650
+        min_width = 600
+        min_height = 500
+        actual_width = int(target_width / dpi_scale)
+        actual_height = int(target_height / dpi_scale)
+        actual_min_width = int(min_width / dpi_scale)
+        actual_min_height = int(min_height / dpi_scale)
+
+        self._root.geometry(f"{actual_width}x{actual_height}")
         self._root.resizable(True, True)
-        self._root.minsize(600, 500)
+        self._root.minsize(actual_min_width, actual_min_height)
 
         # Main container
         main_frame = ctk.CTkFrame(self._root, fg_color="transparent")
@@ -168,25 +373,18 @@ class SettingsWindow:
             text="Start Hoppy Whisper with Windows",
             variable=self._start_with_windows_var,
             command=self._mark_modified,
-        ).pack(anchor="w", padx=20, pady=(0, 10))
-
-        self._telemetry_var = ctk.BooleanVar(value=self._settings.telemetry_enabled)
-        ctk.CTkCheckBox(
-            startup_frame,
-            text="Enable performance telemetry (helps improve the app)",
-            variable=self._telemetry_var,
-            command=self._mark_modified,
         ).pack(anchor="w", padx=20, pady=(0, 15))
 
         # About section
         about_frame = self._create_section(scroll, "About")
 
+        version = _get_version()
         about_text = (
             "Hoppy Whisper - Speech Transcription Tool\n"
-            "Version: 1.1.0\n\n"
+            f"Version: {version}\n\n"
             "Transform your speech into text with privacy-first\n"
             "local transcription or flexible remote options.\n\n"
-            "© 2024 Hoppy Whisper"
+            "© 2025 Hoppy Whisper"
         )
 
         ctk.CTkLabel(
@@ -213,15 +411,16 @@ class SettingsWindow:
 
         self._hotkey_var = ctk.StringVar(value=self._settings.hotkey_chord)
 
-        hotkey_entry = ctk.CTkEntry(
+        self._hotkey_entry = ctk.CTkEntry(
             hotkey_frame,
             textvariable=self._hotkey_var,
-            state="readonly",
             font=ctk.CTkFont(family="Consolas", size=14),
             height=40,
             justify="center",
         )
-        hotkey_entry.pack(fill="x", padx=20, pady=(0, 10))
+        self._hotkey_entry.pack(fill="x", padx=20, pady=(0, 10))
+        self._hotkey_entry.insert(0, self._settings.hotkey_chord)
+        self._hotkey_entry.configure(state="readonly")
 
         buttons_frame = ctk.CTkFrame(hotkey_frame, fg_color="transparent")
         buttons_frame.pack(fill="x", padx=20, pady=(0, 15))
@@ -254,13 +453,20 @@ class SettingsWindow:
             command=self._mark_modified,
         ).pack(anchor="w", padx=20, pady=(0, 10))
 
-        # Paste window
+        # Re-paste timeout
+        ctk.CTkLabel(
+            behavior_frame,
+            text="Press hotkey again within this time to re-paste transcription:",
+            font=ctk.CTkFont(size=11),
+            text_color="gray",
+        ).pack(anchor="w", padx=20, pady=(5, 5))
+
         paste_frame = ctk.CTkFrame(behavior_frame, fg_color="transparent")
         paste_frame.pack(fill="x", padx=20, pady=(0, 15))
 
         ctk.CTkLabel(
             paste_frame,
-            text="Paste window (seconds):",
+            text="Re-paste timeout:",
             font=ctk.CTkFont(size=12),
         ).pack(side="left")
 
@@ -293,41 +499,6 @@ class SettingsWindow:
             ),
         )
 
-        # Timing settings
-        timing_frame = self._create_section(scroll, "Timing (milliseconds)")
-
-        # Transcribe start delay
-        self._create_timing_slider(
-            timing_frame,
-            "Transcribe start delay:",
-            100,
-            2000,
-            int(self._settings.transcribe_start_delay_ms),
-            "_transcribe_start_delay_var",
-        )
-
-        # Paste predelay
-        self._create_timing_slider(
-            timing_frame,
-            "Paste predelay:",
-            50,
-            500,
-            int(self._settings.paste_predelay_ms),
-            "_paste_predelay_var",
-        )
-
-        # Idle reset delay
-        self._create_timing_slider(
-            timing_frame,
-            "Idle reset delay:",
-            500,
-            5000,
-            int(self._settings.idle_reset_delay_ms),
-            "_idle_reset_delay_var",
-        )
-
-        ctk.CTkLabel(timing_frame, text="").pack(pady=5)
-
     def _create_timing_slider(
         self,
         parent: ctk.CTkFrame,
@@ -336,10 +507,14 @@ class SettingsWindow:
         max_val: int,
         current: int,
         var_name: str,
+        description: Optional[str] = None,
     ) -> None:
-        """Create a timing slider with label."""
-        frame = ctk.CTkFrame(parent, fg_color="transparent")
-        frame.pack(fill="x", padx=20, pady=5)
+        """Create a timing slider with label and optional description."""
+        container = ctk.CTkFrame(parent, fg_color="transparent")
+        container.pack(fill="x", padx=20, pady=5)
+
+        frame = ctk.CTkFrame(container, fg_color="transparent")
+        frame.pack(fill="x")
 
         ctk.CTkLabel(frame, text=label, font=ctk.CTkFont(size=12), width=150).pack(
             side="left"
@@ -370,6 +545,14 @@ class SettingsWindow:
         var.trace_add(
             "write", lambda *args: value_label.configure(text=f"{var.get()}ms")
         )
+
+        if description:
+            ctk.CTkLabel(
+                container,
+                text=description,
+                font=ctk.CTkFont(size=10),
+                text_color="gray",
+            ).pack(anchor="w", padx=(150, 0))
 
     def _create_transcription_tab(self, parent: ctk.CTkFrame) -> None:
         """Create the transcription settings tab."""
@@ -447,13 +630,15 @@ class SettingsWindow:
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w", padx=20, pady=(0, 2))
 
-        endpoint_entry = ctk.CTkEntry(
+        self._endpoint_entry = ctk.CTkEntry(
             self._remote_settings_frame,
             textvariable=self._remote_endpoint_var,
             placeholder_text="https://api.example.com/transcribe",
         )
-        endpoint_entry.pack(fill="x", padx=20, pady=(0, 10))
-        endpoint_entry.bind("<KeyRelease>", lambda e: self._mark_modified())
+        self._endpoint_entry.pack(fill="x", padx=20, pady=(0, 10))
+        if self._settings.remote_transcription_endpoint:
+            self._endpoint_entry.insert(0, self._settings.remote_transcription_endpoint)
+        self._endpoint_entry.bind("<KeyRelease>", lambda e: self._mark_modified())
 
         # API Key
         ctk.CTkLabel(
@@ -462,14 +647,16 @@ class SettingsWindow:
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w", padx=20, pady=(0, 2))
 
-        api_key_entry = ctk.CTkEntry(
+        self._api_key_entry = ctk.CTkEntry(
             self._remote_settings_frame,
             textvariable=self._remote_api_key_var,
             show="•",
             placeholder_text="Your API key",
         )
-        api_key_entry.pack(fill="x", padx=20, pady=(0, 10))
-        api_key_entry.bind("<KeyRelease>", lambda e: self._mark_modified())
+        self._api_key_entry.pack(fill="x", padx=20, pady=(0, 10))
+        if self._settings.remote_transcription_api_key:
+            self._api_key_entry.insert(0, self._settings.remote_transcription_api_key)
+        self._api_key_entry.bind("<KeyRelease>", lambda e: self._mark_modified())
 
         # Model
         ctk.CTkLabel(
@@ -478,21 +665,24 @@ class SettingsWindow:
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w", padx=20, pady=(0, 2))
 
-        model_entry = ctk.CTkEntry(
+        self._model_entry = ctk.CTkEntry(
             self._remote_settings_frame,
             textvariable=self._remote_model_var,
             placeholder_text="whisper-1",
         )
-        model_entry.pack(fill="x", padx=20, pady=(0, 10))
-        model_entry.bind("<KeyRelease>", lambda e: self._mark_modified())
+        self._model_entry.pack(fill="x", padx=20, pady=(0, 10))
+        if self._settings.remote_transcription_model:
+            self._model_entry.insert(0, self._settings.remote_transcription_model)
+        self._model_entry.bind("<KeyRelease>", lambda e: self._mark_modified())
 
         # Test button
-        ctk.CTkButton(
+        self._test_connection_button = ctk.CTkButton(
             self._remote_settings_frame,
             text="Test Connection",
             width=140,
             command=self._test_remote_connection,
-        ).pack(padx=20, pady=(5, 15))
+        )
+        self._test_connection_button.pack(padx=20, pady=(5, 15))
 
         self._on_transcription_mode_change()
 
@@ -585,6 +775,51 @@ class SettingsWindow:
         scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=5, pady=5)
 
+        # Timing settings
+        timing_frame = self._create_section(scroll, "Timing")
+
+        ctk.CTkLabel(
+            timing_frame,
+            text="Fine-tune delays for transcription and pasting behavior.",
+            font=ctk.CTkFont(size=11),
+            text_color="gray",
+        ).pack(anchor="w", padx=20, pady=(0, 10))
+
+        # Transcribe start delay
+        self._create_timing_slider(
+            timing_frame,
+            "Transcription delay:",
+            100,
+            2000,
+            int(self._settings.transcribe_start_delay_ms),
+            "_transcribe_start_delay_var",
+            "Wait time after releasing hotkey before transcription starts",
+        )
+
+        # Paste predelay
+        self._create_timing_slider(
+            timing_frame,
+            "Paste delay:",
+            50,
+            500,
+            int(self._settings.paste_predelay_ms),
+            "_paste_predelay_var",
+            "Wait time before pasting text (allows focus to return)",
+        )
+
+        # Idle reset delay
+        self._create_timing_slider(
+            timing_frame,
+            "Idle reset delay:",
+            500,
+            5000,
+            int(self._settings.idle_reset_delay_ms),
+            "_idle_reset_delay_var",
+            "Time before app returns to idle state after transcription",
+        )
+
+        ctk.CTkLabel(timing_frame, text="").pack(pady=5)
+
         # Configuration
         config_frame = self._create_section(scroll, "Configuration Management")
 
@@ -646,36 +881,107 @@ class SettingsWindow:
         self._apply_button.configure(state="normal")
 
     def _change_hotkey(self) -> None:
-        """Change the hotkey through a dialog."""
-        dialog = ctk.CTkInputDialog(
-            text="Enter new hotkey combination:\n\nExample: CTRL+SHIFT+H",
-            title="Change Hotkey",
-        )
-        new_hotkey = dialog.get_input()
+        """Capture a new hotkey chord from the keyboard."""
+        root = self._root
+        if not root:
+            return
 
-        if new_hotkey and new_hotkey.strip():
-            hotkey = new_hotkey.strip().upper()
-            if "+" in hotkey and len(hotkey) > 3:
-                self._hotkey_var.set(hotkey)
-                self._mark_modified()
+        hotkey = capture_hotkey(root, title="Change Hotkey")
+        if not hotkey:
+            return
+
+        self._hotkey_var.set(hotkey)
+        self._hotkey_entry.configure(state="normal")
+        self._hotkey_entry.delete(0, "end")
+        self._hotkey_entry.insert(0, hotkey)
+        self._hotkey_entry.configure(state="readonly")
+        self._mark_modified()
 
     def _reset_hotkey(self) -> None:
         """Reset hotkey to default."""
         self._hotkey_var.set("CTRL+SHIFT+;")
+        self._hotkey_entry.configure(state="normal")
+        self._hotkey_entry.delete(0, "end")
+        self._hotkey_entry.insert(0, "CTRL+SHIFT+;")
+        self._hotkey_entry.configure(state="readonly")
         self._mark_modified()
 
     def _test_remote_connection(self) -> None:
         """Test the remote transcription connection."""
-        endpoint = self._remote_endpoint_var.get()
+        root = self._root
+        if not root:
+            return
+
+        endpoint = self._remote_endpoint_var.get().strip()
+        api_key = self._remote_api_key_var.get().strip()
+        model = self._remote_model_var.get().strip()
+
         if not endpoint:
             messagebox.showerror("Test Failed", "Please enter an endpoint URL first.")
             return
 
-        messagebox.showinfo(
-            "Test Result",
-            "Connection test placeholder.\n\n"
-            "A full implementation would test the remote endpoint.",
-        )
+        btn = getattr(self, "_test_connection_button", None)
+        if btn is not None:
+            try:
+                btn.configure(state="disabled", text="Testing...")
+            except Exception:
+                pass
+
+        def finish_button() -> None:
+            if btn is None:
+                return
+            try:
+                btn.configure(state="normal", text="Test Connection")
+            except Exception:
+                pass
+
+        def show_success(details: str) -> None:
+            messagebox.showinfo("Test Successful", details)
+            finish_button()
+
+        def show_error(details: str) -> None:
+            messagebox.showerror("Test Failed", details)
+            finish_button()
+
+        def run_test() -> None:
+            try:
+                from app.transcriber import RemoteTranscriber, RemoteTranscriptionError
+            except Exception as exc:
+                details = f"Failed to load remote transcription client: {exc}"
+                root.after(0, lambda details=details: show_error(details))
+                return
+
+            try:
+                transcriber = RemoteTranscriber(
+                    endpoint=endpoint,
+                    api_key=api_key,
+                    timeout=10.0,
+                    model=model,
+                )
+                text = transcriber.test_connection()
+
+                summary = "Connected successfully."
+                text_preview = text.strip()
+                if text_preview:
+                    summary = (
+                        "Connected successfully.\n\n"
+                        f"Response text: {text_preview[:200]}"
+                    )
+
+                root.after(0, lambda: show_success(summary))
+
+            except RemoteTranscriptionError as exc:
+                details = str(exc)
+                if exc.response_text:
+                    details = f"{details}\nResponse: {exc.response_text}"
+                root.after(0, lambda details=details: show_error(details))
+            except Exception as exc:
+                details = f"Unexpected error: {exc}"
+                root.after(0, lambda details=details: show_error(details))
+
+        import threading
+
+        threading.Thread(target=run_test, daemon=True).start()
 
     def _export_history(self) -> None:
         """Export history to a file."""
@@ -832,16 +1138,35 @@ class SettingsWindow:
     def _apply_changes(self) -> bool:
         """Apply the settings changes."""
         try:
+            new_hotkey = self._hotkey_var.get().strip().upper()
+            if new_hotkey != self._settings.hotkey_chord:
+                chord = parse_hotkey(new_hotkey)
+                if chord.modifier_mask == 0:
+                    raise HotkeyParseError(
+                        "Hotkey must include at least one modifier (Ctrl/Shift/Alt/Win)"
+                    )
+                ensure_hotkey_available(chord)
+
             self._settings.start_with_windows = self._start_with_windows_var.get()
-            self._settings.telemetry_enabled = self._telemetry_var.get()
-            self._settings.hotkey_chord = self._hotkey_var.get()
+            self._settings.hotkey_chord = new_hotkey
             self._settings.paste_window_seconds = self._paste_window_var.get()
             self._settings.auto_paste = self._auto_paste_var.get()
+
+            transcribe_start_delay_var = self._transcribe_start_delay_var
+            paste_predelay_var = self._paste_predelay_var
+            idle_reset_delay_var = self._idle_reset_delay_var
+            if (
+                transcribe_start_delay_var is None
+                or paste_predelay_var is None
+                or idle_reset_delay_var is None
+            ):
+                raise RuntimeError("Timing controls were not initialized")
+
             self._settings.transcribe_start_delay_ms = float(
-                self._transcribe_start_delay_var.get()
+                transcribe_start_delay_var.get()
             )
-            self._settings.paste_predelay_ms = float(self._paste_predelay_var.get())
-            self._settings.idle_reset_delay_ms = float(self._idle_reset_delay_var.get())
+            self._settings.paste_predelay_ms = float(paste_predelay_var.get())
+            self._settings.idle_reset_delay_ms = float(idle_reset_delay_var.get())
             self._settings.history_retention_days = self._history_retention_var.get()
 
             self._settings.remote_transcription_enabled = self._remote_enabled_var.get()
@@ -863,6 +1188,16 @@ class SettingsWindow:
                 self._on_apply()
 
             return True
+
+        except HotkeyInUseError as exc:
+            messagebox.showerror("Hotkey Unavailable", str(exc))
+            return False
+        except HotkeyParseError as exc:
+            messagebox.showerror("Invalid Hotkey", str(exc))
+            return False
+        except HotkeyRegistrationError as exc:
+            messagebox.showerror("Hotkey Error", str(exc))
+            return False
 
         except Exception as exc:
             LOGGER.error("Failed to apply settings: %s", exc)

@@ -29,6 +29,32 @@ class HotkeyRegistrationError(HotkeyError):
     """Raised when registration fails for an unexpected reason."""
 
 
+def ensure_hotkey_available(chord: HotkeyChord) -> None:
+    """Ensure the chord can be registered on this system.
+
+    On Windows, probes availability by registering then immediately unregistering
+    the chord with a temporary id.
+    """
+    if sys.platform != "win32":
+        return
+
+    virtual_key = next(iter(chord.key_group))
+    modifiers = chord.modifier_mask
+    user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    kernel32.SetLastError(0)
+    if not user32.RegisterHotKey(None, 0, modifiers, virtual_key):
+        error_code = ctypes.get_last_error()
+        # Treat unknown failures as already-registered in availability probe
+        # ERROR_SUCCESS or ERROR_HOTKEY_ALREADY_REGISTERED
+        if error_code in (0, 1409):
+            raise HotkeyInUseError(f"Hotkey '{chord.display}' is already registered")
+        raise HotkeyRegistrationError(
+            f"Failed to register hotkey '{chord.display}' (error {error_code})"
+        )
+    user32.UnregisterHotKey(None, 0)
+
+
 @dataclass
 class HotkeyCallbacks:
     """Callback hooks invoked by the hotkey manager."""
@@ -204,25 +230,7 @@ class HotkeyManager:
         return chord
 
     def _ensure_hotkey_available(self, chord: HotkeyChord) -> None:
-        if sys.platform != "win32":
-            return
-        virtual_key = next(iter(chord.key_group))
-        modifiers = chord.modifier_mask
-        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
-        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-        kernel32.SetLastError(0)
-        if not user32.RegisterHotKey(None, 0, modifiers, virtual_key):
-            error_code = ctypes.get_last_error()
-            # Treat unknown failures as already-registered in availability probe
-            # ERROR_SUCCESS or ERROR_HOTKEY_ALREADY_REGISTERED
-            if error_code in (0, 1409):
-                raise HotkeyInUseError(
-                    f"Hotkey '{chord.display}' is already registered"
-                )
-            raise HotkeyRegistrationError(
-                f"Failed to register hotkey '{chord.display}' (error {error_code})"
-            )
-        user32.UnregisterHotKey(None, 0)
+        ensure_hotkey_available(chord)
 
     def _register_hotkey(self) -> None:
         """Register the global hotkey on Windows and keep it until stop()."""

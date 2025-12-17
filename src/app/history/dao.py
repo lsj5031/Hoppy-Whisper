@@ -87,19 +87,51 @@ class HistoryDAO:
             if not self._conn:
                 raise RuntimeError("Database not opened")
 
+            # Format query for FTS5: add prefix matching and escape special chars
+            # Split into words and add * for prefix matching
+            words = query.strip().split()
+            if not words:
+                return []
+
+            # Escape FTS5 special characters and add prefix wildcard
+            fts_terms = []
+            for word in words:
+                # Escape quotes by doubling them
+                escaped = word.replace('"', '""')
+                # Wrap in quotes for exact token and add * for prefix match
+                fts_terms.append(f'"{escaped}"*')
+
+            fts_query = " ".join(fts_terms)
+
             cursor = self._conn.cursor()
-            cursor.execute(
-                """
-                SELECT u.id, u.text, u.created_utc, u.duration_ms, u.mode, u.raw_text
-                FROM utterances_fts fts
-                JOIN utterances u ON fts.rowid = u.id
-                WHERE utterances_fts MATCH ?
-                ORDER BY u.created_utc DESC
-                LIMIT ?
-                """,
-                (query, limit),
-            )
-            return [self._row_to_utterance(row) for row in cursor.fetchall()]
+            try:
+                cursor.execute(
+                    """
+                    SELECT u.id, u.text, u.created_utc, u.duration_ms,
+                           u.mode, u.raw_text
+                    FROM utterances_fts fts
+                    JOIN utterances u ON fts.rowid = u.id
+                    WHERE utterances_fts MATCH ?
+                    ORDER BY u.created_utc DESC
+                    LIMIT ?
+                    """,
+                    (fts_query, limit),
+                )
+                return [self._row_to_utterance(row) for row in cursor.fetchall()]
+            except sqlite3.OperationalError:
+                # Fallback to LIKE search if FTS query fails
+                like_pattern = f"%{query}%"
+                cursor.execute(
+                    """
+                    SELECT id, text, created_utc, duration_ms, mode, raw_text
+                    FROM utterances
+                    WHERE text LIKE ?
+                    ORDER BY created_utc DESC
+                    LIMIT ?
+                    """,
+                    (like_pattern, limit),
+                )
+                return [self._row_to_utterance(row) for row in cursor.fetchall()]
 
     def get_recent(self, limit: int = 50) -> list[Utterance]:
         """Get the most recent utterances."""

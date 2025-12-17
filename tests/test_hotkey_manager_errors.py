@@ -149,7 +149,7 @@ def test_dispatch_on_error_callback_also_fails(
     assert "Error callback also failed" in caplog.text
 
 
-def test_dispatch_does_not_reraise() -> None:
+def test_dispatch_does_not_reraise(monkeypatch: pytest.MonkeyPatch) -> None:
     """_dispatch does not re-raise exceptions."""
 
     def failing_handler() -> None:
@@ -163,6 +163,7 @@ def test_dispatch_does_not_reraise() -> None:
     )
 
     # Create a manager without starting it
+    monkeypatch.setattr("app.hotkey.manager.sys.platform", "test")
     manager = HotkeyManager(
         "CTRL+SHIFT+;",
         callbacks,
