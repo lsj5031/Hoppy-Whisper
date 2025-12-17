@@ -3,13 +3,36 @@
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Optional
 
 import customtkinter as ctk
 
 LOGGER = logging.getLogger("hoppy_whisper.toast")
+
+
+def _get_icon_path() -> Optional[Path]:
+    """Get the path to the application icon."""
+    # Try relative to this file first (development)
+    base = Path(__file__).resolve().parent.parent.parent.parent
+    icon_path = base / "icos" / "BunnyStandby.ico"
+    if icon_path.exists():
+        return icon_path
+
+    # PyInstaller (onefile extracts datas under sys._MEIPASS; onedir keeps next to exe)
+    if getattr(sys, "frozen", False):
+        if hasattr(sys, "_MEIPASS"):
+            icon_path = Path(sys._MEIPASS) / "icos" / "BunnyStandby.ico"
+            if icon_path.exists():
+                return icon_path
+
+        icon_path = Path(sys.executable).parent / "icos" / "BunnyStandby.ico"
+        if icon_path.exists():
+            return icon_path
+    return None
 
 
 @dataclass
@@ -296,6 +319,17 @@ class ToastManager:
         root = ctk.CTk()
         root.withdraw()
         root.title("Hoppy Whisper Toast Manager")
+
+        # Set window icon
+        def _set_icon():
+            icon_path = _get_icon_path()
+            if icon_path:
+                try:
+                    root.iconbitmap(str(icon_path))
+                except Exception:
+                    pass
+
+        root.after(10, _set_icon)
         return root
 
     def show_toast(

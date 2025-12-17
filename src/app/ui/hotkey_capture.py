@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import sys
+from pathlib import Path
 from typing import Any, Optional
 
 import customtkinter as ctk
@@ -15,6 +17,27 @@ from app.hotkey import (
 )
 
 LOGGER = logging.getLogger("hoppy_whisper.ui.hotkey_capture")
+
+
+def _get_icon_path() -> Optional[Path]:
+    """Get the path to the application icon."""
+    # Try relative to this file first (development)
+    base = Path(__file__).resolve().parent.parent.parent.parent
+    icon_path = base / "icos" / "BunnyStandby.ico"
+    if icon_path.exists():
+        return icon_path
+
+    # PyInstaller (onefile extracts datas under sys._MEIPASS; onedir keeps next to exe)
+    if getattr(sys, "frozen", False):
+        if hasattr(sys, "_MEIPASS"):
+            icon_path = Path(sys._MEIPASS) / "icos" / "BunnyStandby.ico"
+            if icon_path.exists():
+                return icon_path
+
+        icon_path = Path(sys.executable).parent / "icos" / "BunnyStandby.ico"
+        if icon_path.exists():
+            return icon_path
+    return None
 
 _MODIFIER_ORDER = ("CTRL", "SHIFT", "ALT", "WIN")
 
@@ -119,6 +142,17 @@ class HotkeyCaptureDialog(ctk.CTkToplevel):
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
+
+        # Set window icon (must be done after window is mapped)
+        def _set_icon():
+            icon_path = _get_icon_path()
+            if icon_path:
+                try:
+                    self.iconbitmap(str(icon_path))
+                except Exception:
+                    pass
+
+        self.after(50, _set_icon)
 
         self._require_modifier = require_modifier
         self._result: Optional[str] = None
