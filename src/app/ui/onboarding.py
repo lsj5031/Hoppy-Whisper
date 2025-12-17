@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import ctypes
 import logging
-import tkinter as tk
+import sys
+import threading
 from dataclasses import dataclass
-from tkinter import messagebox, ttk
 from typing import Callable, Optional
+
+import customtkinter as ctk
 
 from app.settings import AppSettings
 from app.transcriber import load_transcriber
@@ -14,30 +17,95 @@ from app.transcriber import load_transcriber
 LOGGER = logging.getLogger("hoppy_whisper.onboarding")
 
 
+def get_windows_dpi_scale() -> float:
+    """Get the Windows DPI scale factor using the Windows API.
+
+    Returns a scale factor (1.0 = 100%, 1.5 = 150%, 2.0 = 200%).
+    Falls back to 1.0 if detection fails or not on Windows.
+    """
+    if sys.platform != "win32":
+        return 1.0
+
+    try:
+        # Set DPI awareness to per-monitor aware (Windows 8.1+)
+        # This must be called before any window is created
+        try:
+            # PROCESS_PER_MONITOR_DPI_AWARE = 2
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except (AttributeError, OSError):
+            # Fallback for older Windows versions
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except (AttributeError, OSError):
+                pass
+
+        # Get DPI using multiple methods for reliability
+        dpi = 96  # Default standard DPI
+
+        # Method 1: GetDpiForSystem (Windows 10 1607+)
+        try:
+            dpi = ctypes.windll.user32.GetDpiForSystem()
+        except (AttributeError, OSError):
+            pass
+
+        # Method 2: GetDeviceCaps if Method 1 failed
+        if dpi == 96:
+            try:
+                hdc = ctypes.windll.user32.GetDC(0)
+                if hdc:
+                    # LOGPIXELSX = 88
+                    dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)
+                    ctypes.windll.user32.ReleaseDC(0, hdc)
+            except (AttributeError, OSError):
+                pass
+
+        scale = dpi / 96.0
+        LOGGER.debug("Detected Windows DPI: %d, scale factor: %.2f", dpi, scale)
+        return scale
+
+    except Exception as e:
+        LOGGER.warning("Failed to detect Windows DPI scale: %s", e)
+        return 1.0
+
+
 @dataclass
 class OnboardingStep:
     """Represents a step in the onboarding process."""
+
     title: str
     description: str
-    content_widget: ttk.Frame
     can_skip: bool = True
     validation_func: Optional[Callable[[], bool]] = None
 
 
 class OnboardingWizard:
-    """First-run onboarding wizard with step-by-step setup guidance."""
+    """First-run onboarding wizard with modern UI."""
 
-    def __init__(self, settings: AppSettings, on_complete: Optional[Callable[[], None]] = None):
+    ACCENT_COLOR = "#3b82f6"
+    SUCCESS_COLOR = "#22c55e"
+    ERROR_COLOR = "#ef4444"
+
+    def __init__(
+        self,
+        settings: AppSettings,
+        on_complete: Optional[Callable[[], None]] = None,
+    ):
         self._settings = settings
         self._on_complete = on_complete
-        self._root: Optional[tk.Tk] = None
+        self._root: Optional[ctk.CTk] = None
         self._current_step = 0
         self._steps: list[OnboardingStep] = []
-        self._step_labels: list[ttk.Label] = []
         self._is_complete = False
 
+        # UI variables
+        self._hotkey_var: Optional[ctk.StringVar] = None
+        self._transcription_mode: Optional[ctk.StringVar] = None
+        self._endpoint_var: Optional[ctk.StringVar] = None
+        self._api_key_var: Optional[ctk.StringVar] = None
+        self._model_var: Optional[ctk.StringVar] = None
+
     def show(self) -> bool:
-        """Show the onboarding wizard. Returns True if completed, False if cancelled."""
+        """Show the onboarding wizard. Returns True if completed."""
         if self._is_complete:
             return True
 
@@ -52,101 +120,124 @@ class OnboardingWizard:
 
     def _create_window(self) -> None:
         """Create the main wizard window."""
-        self._root = tk.Tk()
+        # Detect DPI scale factor
+        dpi_scale = get_windows_dpi_scale()
+        LOGGER.info("Detected DPI scale factor: %.2f", dpi_scale)
+
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
+
+        # Reset customtkinter scaling to 1.0 to prevent double-scaling
+        ctk.set_widget_scaling(1.0)
+        ctk.set_window_scaling(1.0)
+
+        self._root = ctk.CTk()
         self._root.title("Hoppy Whisper Setup")
-        self._root.geometry("600x500")
+
+        # Target dimensions we want on screen (at any DPI)
+        # Divide by DPI scale to compensate for system scaling
+        target_width = 680
+        target_height = 580
+        actual_width = int(target_width / dpi_scale)
+        actual_height = int(target_height / dpi_scale)
+        self._root.geometry(f"{actual_width}x{actual_height}")
         self._root.resizable(False, False)
 
-        # Configure window to stay on top
         try:
-            if hasattr(self._root, "attributes"):
-                self._root.attributes("-topmost", True)
+            self._root.attributes("-topmost", True)
         except Exception:
             pass
 
-        # Configure grid
-        self._root.columnconfigure(0, weight=1)
-        self._root.rowconfigure(1, weight=1)
+        # Bind keyboard shortcuts
+        self._root.bind("<Return>", lambda e: self._on_next())
+        self._root.bind("<BackSpace>", lambda e: self._on_back())
+        self._root.bind("<Escape>", lambda e: self._on_cancel())
 
-        # Header with app branding
-        header_frame = ttk.Frame(self._root)
-        header_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 10))
-        header_frame.columnconfigure(1, weight=1)
+        # Main container using grid for better layout control
+        self._root.grid_rowconfigure(0, weight=1)
+        self._root.grid_columnconfigure(0, weight=1)
 
-        # App icon/title
-        title_label = ttk.Label(
+        self._main_frame = ctk.CTkFrame(self._root, fg_color="transparent")
+        self._main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
+        self._main_frame.grid_rowconfigure(2, weight=1)  # Content frame gets extra space
+        self._main_frame.grid_columnconfigure(0, weight=1)
+
+        # Header
+        header_frame = ctk.CTkFrame(self._main_frame, fg_color="transparent")
+        header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 15))
+
+        title_label = ctk.CTkLabel(
             header_frame,
-            text="🦘 Hoppy Whisper",
-            font=("Segoe UI", 16, "bold"),
+            text="🎙️ Hoppy Whisper",
+            font=ctk.CTkFont(size=28, weight="bold"),
         )
-        title_label.grid(row=0, column=0, sticky="w")
+        title_label.pack(anchor="w")
 
-        subtitle_label = ttk.Label(
+        subtitle_label = ctk.CTkLabel(
             header_frame,
             text="Let's get you started with speech transcription",
-            font=("Segoe UI", 10),
-            foreground="gray",
+            font=ctk.CTkFont(size=14),
+            text_color="gray",
         )
-        subtitle_label.grid(row=1, column=0, sticky="w", pady=(5, 0))
+        subtitle_label.pack(anchor="w", pady=(5, 0))
 
         # Step indicator
-        step_frame = ttk.Frame(self._root)
-        step_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 10))
-        step_frame.columnconfigure(0, weight=1)
+        self._step_indicator_frame = ctk.CTkFrame(
+            self._main_frame, fg_color="transparent"
+        )
+        self._step_indicator_frame.grid(row=1, column=0, sticky="ew", pady=(0, 15))
 
-        self._step_indicator = ttk.Frame(step_frame)
-        self._step_indicator.pack(fill="x", pady=(0, 20))
+        # Content area - constrained height
+        self._content_frame = ctk.CTkFrame(self._main_frame, fg_color="transparent")
+        self._content_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 15))
 
-        # Content area
-        self._content_frame = ttk.Frame(self._root)
-        self._content_frame.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 20))
-        self._content_frame.columnconfigure(0, weight=1)
-        self._content_frame.rowconfigure(0, weight=1)
+        # Button frame - stays at bottom
+        button_frame = ctk.CTkFrame(self._main_frame, fg_color="transparent")
+        button_frame.grid(row=3, column=0, sticky="ew", pady=(10, 0))
 
-        # Button frame
-        button_frame = ttk.Frame(self._root)
-        button_frame.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 20))
-
-        # Cancel button (left side)
-        self._cancel_button = ttk.Button(
+        self._cancel_button = ctk.CTkButton(
             button_frame,
             text="Cancel",
+            width=100,
+            fg_color="transparent",
+            border_width=1,
+            text_color=("gray10", "gray90"),
             command=self._on_cancel,
         )
         self._cancel_button.pack(side="left")
 
-        # Spacer
-        spacer = ttk.Frame(button_frame)
-        spacer.pack(side="left", expand=True, fill="x")
+        self._finish_button = ctk.CTkButton(
+            button_frame,
+            text="Finish",
+            width=100,
+            fg_color=self.SUCCESS_COLOR,
+            hover_color="#16a34a",
+            command=self._on_finish,
+        )
+        self._finish_button.pack(side="right")
+        self._finish_button.pack_forget()
 
-        # Navigation buttons (right side)
-        self._back_button = ttk.Button(
+        self._next_button = ctk.CTkButton(
+            button_frame,
+            text="Next →",
+            width=100,
+            command=self._on_next,
+        )
+        self._next_button.pack(side="right", padx=(0, 10))
+
+        self._back_button = ctk.CTkButton(
             button_frame,
             text="← Back",
+            width=100,
+            fg_color="transparent",
+            border_width=1,
+            text_color=("gray10", "gray90"),
             command=self._on_back,
             state="disabled",
         )
         self._back_button.pack(side="right", padx=(0, 10))
 
-        self._next_button = ttk.Button(
-            button_frame,
-            text="Next →",
-            command=self._on_next,
-        )
-        self._next_button.pack(side="right", padx=(0, 10))
-
-        self._finish_button = ttk.Button(
-            button_frame,
-            text="Finish",
-            command=self._on_finish,
-            state="hidden",
-        )
-        self._finish_button.pack(side="right")
-
-        # Handle window close
         self._root.protocol("WM_DELETE_WINDOW", self._on_cancel)
-
-        # Center window on screen
         self._center_window()
 
     def _center_window(self) -> None:
@@ -154,101 +245,85 @@ class OnboardingWizard:
         if not self._root:
             return
         self._root.update_idletasks()
-        width = self._root.winfo_width()
-        height = self._root.winfo_height()
-        x = (self._root.winfo_screenwidth() // 2) - (width // 2)
-        y = (self._root.winfo_screenheight() // 2) - (height // 2)
-        self._root.geometry(f"{width}x{height}+{x}+{y}")
+        w = self._root.winfo_width()
+        h = self._root.winfo_height()
+        x = (self._root.winfo_screenwidth() // 2) - (w // 2)
+        y = (self._root.winfo_screenheight() // 2) - (h // 2)
+        self._root.geometry(f"{w}x{h}+{x}+{y}")
 
     def _setup_steps(self) -> None:
         """Setup all onboarding steps."""
-        # Step 1: Welcome
-        welcome_frame = ttk.Frame(self._content_frame)
-        welcome_content = self._create_welcome_content(welcome_frame)
-        self._steps.append(OnboardingStep(
-            title="Welcome to Hoppy Whisper",
-            description="Let's set up your speech transcription experience",
-            content_widget=welcome_content,
-            can_skip=False,
-        ))
-
-        # Step 2: Hotkey Configuration
-        hotkey_frame = ttk.Frame(self._content_frame)
-        hotkey_content = self._create_hotkey_content(hotkey_frame)
-        self._steps.append(OnboardingStep(
-            title="Configure Hotkey",
-            description="Choose the keyboard shortcut for starting transcription",
-            content_widget=hotkey_content,
-            validation_func=self._validate_hotkey,
-        ))
-
-        # Step 3: Transcription Mode
-        mode_frame = ttk.Frame(self._content_frame)
-        mode_content = self._create_transcription_mode_content(mode_frame)
-        self._steps.append(OnboardingStep(
-            title="Transcription Mode",
-            description="Choose between local or remote transcription",
-            content_widget=mode_content,
-        ))
-
-        # Step 4: Testing
-        test_frame = ttk.Frame(self._content_frame)
-        test_content = self._create_test_content(test_frame)
-        self._steps.append(OnboardingStep(
-            title="Test Your Setup",
-            description="Let's verify everything is working correctly",
-            content_widget=test_content,
-            can_skip=True,
-        ))
-
-        # Step 5: Complete
-        complete_frame = ttk.Frame(self._content_frame)
-        complete_content = self._create_complete_content(complete_frame)
-        self._steps.append(OnboardingStep(
-            title="You're All Set!",
-            description="Ready to start transcribing",
-            content_widget=complete_content,
-            can_skip=False,
-        ))
-
+        self._steps = [
+            OnboardingStep(
+                title="Welcome",
+                description="Get started with Hoppy Whisper",
+                can_skip=False,
+            ),
+            OnboardingStep(
+                title="Hotkey",
+                description="Configure your recording shortcut",
+                validation_func=self._validate_hotkey,
+            ),
+            OnboardingStep(
+                title="Transcription",
+                description="Choose transcription method",
+            ),
+            OnboardingStep(
+                title="Test",
+                description="Verify your setup",
+                can_skip=True,
+            ),
+            OnboardingStep(
+                title="Complete",
+                description="You're all set!",
+                can_skip=False,
+            ),
+        ]
         self._update_step_indicator()
 
     def _update_step_indicator(self) -> None:
         """Update the step indicator."""
-        # Clear existing step indicators
-        for widget in self._step_indicator.winfo_children():
+        for widget in self._step_indicator_frame.winfo_children():
             widget.destroy()
 
-        # Create step indicators
         for i, step in enumerate(self._steps):
-            step_frame = ttk.Frame(self._step_indicator)
+            step_frame = ctk.CTkFrame(
+                self._step_indicator_frame, fg_color="transparent"
+            )
             step_frame.pack(side="left", expand=True, fill="x", padx=5)
 
-            # Step circle
-            circle_color = "#0078d4" if i < self._current_step else (
-                "#107c10" if i == self._current_step else "#666666"
-            )
+            # Determine colors
+            if i < self._current_step:
+                color = self.SUCCESS_COLOR
+                text_color = "white"
+            elif i == self._current_step:
+                color = self.ACCENT_COLOR
+                text_color = "white"
+            else:
+                color = "#374151"
+                text_color = "gray"
 
-            step_label = ttk.Label(
+            # Step circle
+            circle = ctk.CTkLabel(
                 step_frame,
-                text=str(i + 1),
-                font=("Segoe UI", 10, "bold"),
-                foreground="white",
-                background=circle_color,
-                width=3,
+                text=str(i + 1) if i >= self._current_step else "✓",
+                width=32,
+                height=32,
+                corner_radius=16,
+                fg_color=color,
+                text_color=text_color,
+                font=ctk.CTkFont(size=12, weight="bold"),
             )
-            step_label.pack()
+            circle.pack()
 
             # Step title
-            title_label = ttk.Label(
+            title = ctk.CTkLabel(
                 step_frame,
                 text=step.title,
-                font=("Segoe UI", 8),
-                wraplength=100,
+                font=ctk.CTkFont(size=11),
+                text_color="gray" if i != self._current_step else "white",
             )
-            title_label.pack(pady=(5, 0))
-
-            self._step_labels.append(step_label)
+            title.pack(pady=(5, 0))
 
     def _show_step(self, step_index: int) -> None:
         """Show the specified step."""
@@ -256,394 +331,426 @@ class OnboardingWizard:
             return
 
         self._current_step = step_index
-        step = self._steps[step_index]
 
-        # Clear content
         for widget in self._content_frame.winfo_children():
             widget.destroy()
 
-        # Show step content
-        step.content_widget.pack(fill="both", expand=True, pady=10)
+        step_creators = [
+            self._create_welcome_content,
+            self._create_hotkey_content,
+            self._create_transcription_mode_content,
+            self._create_test_content,
+            self._create_complete_content,
+        ]
+        step_creators[step_index]()
 
-        # Update navigation buttons
-        self._back_button.config(state="normal" if step_index > 0 else "disabled")
+        # Update navigation
+        self._back_button.configure(state="normal" if step_index > 0 else "disabled")
 
         if step_index == len(self._steps) - 1:
-            # Last step - show Finish button
             self._next_button.pack_forget()
             self._finish_button.pack(side="right")
         else:
-            # Middle steps - show Next button
             self._finish_button.pack_forget()
-            self._next_button.pack(side="right")
+            self._next_button.pack(side="right", padx=(0, 10))
 
         self._update_step_indicator()
 
-    def _create_welcome_content(self, parent: ttk.Frame) -> ttk.Frame:
+    def _create_welcome_content(self) -> None:
         """Create the welcome step content."""
-        content = ttk.Frame(parent)
-        content.columnconfigure(0, weight=1)
+        frame = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+        frame.pack(fill="both", expand=True)
 
-        # Welcome message
-        welcome_text = """
-Welcome to Hoppy Whisper! 🎉
-
-This guide will help you set up speech transcription in just a few steps.
-We'll configure your hotkey, choose the best transcription method for your needs,
-and test everything to make sure it works perfectly.
-
-Your audio is processed locally for privacy, and all settings are saved to your computer.
-        """
-
-        welcome_label = ttk.Label(
-            content,
-            text=welcome_text.strip(),
-            font=("Segoe UI", 11),
-            justify="left",
-            wraplength=500,
+        welcome_text = (
+            "Welcome to Hoppy Whisper! 🎉\n\n"
+            "This guide will help you set up speech transcription in a few steps.\n"
+            "We'll configure your hotkey, choose the best transcription method,\n"
+            "and test everything to make sure it works perfectly."
         )
-        welcome_label.grid(row=0, column=0, sticky="ew", pady=20)
 
-        # Feature highlights
-        features_frame = ttk.LabelFrame(content, text="What you'll be able to do:", padding=15)
-        features_frame.grid(row=1, column=0, sticky="ew", pady=10)
+        welcome_label = ctk.CTkLabel(
+            frame,
+            text=welcome_text,
+            font=ctk.CTkFont(size=14),
+            justify="left",
+        )
+        welcome_label.pack(pady=20, anchor="w")
+
+        # Features
+        features_frame = ctk.CTkFrame(frame, corner_radius=12)
+        features_frame.pack(fill="x", pady=10)
+
+        features_title = ctk.CTkLabel(
+            features_frame,
+            text="What you'll be able to do:",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        features_title.pack(anchor="w", padx=20, pady=(15, 10))
 
         features = [
-            "🎤 Press a hotkey to start recording your speech",
-            "📝 Transcribe speech to text instantly",
-            "📋 Automatically copy text to your clipboard",
-            "🔄 Paste text directly into any application",
-            "📚 Search through your transcription history",
+            ("🎤", "Press a hotkey to start recording your speech"),
+            ("📝", "Transcribe speech to text instantly"),
+            ("📋", "Automatically copy text to your clipboard"),
+            ("🔄", "Paste text directly into any application"),
+            ("📚", "Search through your transcription history"),
         ]
 
-        for i, feature in enumerate(features):
-            label = ttk.Label(
-                features_frame,
-                text=feature,
-                font=("Segoe UI", 10),
-            )
-            label.grid(row=i, column=0, sticky="w", pady=2)
+        for icon, text in features:
+            feature_frame = ctk.CTkFrame(features_frame, fg_color="transparent")
+            feature_frame.pack(fill="x", padx=20, pady=3)
 
-        return content
+            ctk.CTkLabel(
+                feature_frame, text=icon, font=ctk.CTkFont(size=14), width=30
+            ).pack(side="left")
 
-    def _create_hotkey_content(self, parent: ttk.Frame) -> ttk.Frame:
-        """Create the hotkey configuration step content."""
-        content = ttk.Frame(parent)
-        content.columnconfigure(0, weight=1)
+            ctk.CTkLabel(
+                feature_frame, text=text, font=ctk.CTkFont(size=13), anchor="w"
+            ).pack(side="left", fill="x", expand=True)
 
-        # Instructions
-        instruction_label = ttk.Label(
-            content,
-            text="Choose a hotkey combination that doesn't conflict with other programs.",
-            font=("Segoe UI", 10),
-            justify="left",
-        )
-        instruction_label.grid(row=0, column=0, sticky="ew", pady=(0, 20))
+        ctk.CTkLabel(features_frame, text="").pack(pady=5)
 
-        # Hotkey selection frame
-        hotkey_frame = ttk.LabelFrame(content, text="Hotkey Configuration", padding=15)
-        hotkey_frame.grid(row=1, column=0, sticky="ew", pady=10)
-        hotkey_frame.columnconfigure(1, weight=1)
+    def _create_hotkey_content(self) -> None:
+        """Create the hotkey configuration step."""
+        frame = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+        frame.pack(fill="both", expand=True)
 
-        # Current hotkey display
-        ttk.Label(hotkey_frame, text="Current hotkey:").grid(row=0, column=0, sticky="w", pady=(0, 5))
+        ctk.CTkLabel(
+            frame,
+            text="Choose a hotkey that doesn't conflict with other programs.",
+            font=ctk.CTkFont(size=14),
+            text_color="gray",
+        ).pack(anchor="w", pady=(0, 20))
 
-        self._hotkey_var = tk.StringVar(value=self._settings.hotkey_chord)
-        hotkey_display = ttk.Entry(
+        # Hotkey frame
+        hotkey_frame = ctk.CTkFrame(frame, corner_radius=12)
+        hotkey_frame.pack(fill="x", pady=10)
+
+        ctk.CTkLabel(
+            hotkey_frame,
+            text="Current Hotkey",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", padx=20, pady=(15, 10))
+
+        self._hotkey_var = ctk.StringVar(value=self._settings.hotkey_chord)
+
+        hotkey_display = ctk.CTkEntry(
             hotkey_frame,
             textvariable=self._hotkey_var,
             state="readonly",
-            font=("Consolas", 10),
+            font=ctk.CTkFont(family="Consolas", size=16),
+            height=45,
+            justify="center",
         )
-        hotkey_display.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 15))
+        hotkey_display.pack(fill="x", padx=20, pady=(0, 15))
 
-        # Hotkey buttons
-        buttons_frame = ttk.Frame(hotkey_frame)
-        buttons_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        buttons_frame = ctk.CTkFrame(hotkey_frame, fg_color="transparent")
+        buttons_frame.pack(fill="x", padx=20, pady=(0, 15))
 
-        ttk.Button(
+        ctk.CTkButton(
             buttons_frame,
             text="Change Hotkey",
+            width=140,
             command=self._change_hotkey,
         ).pack(side="left", padx=(0, 10))
 
-        ttk.Button(
+        ctk.CTkButton(
             buttons_frame,
             text="Reset to Default",
+            width=140,
+            fg_color="transparent",
+            border_width=1,
+            text_color=("gray10", "gray90"),
             command=self._reset_hotkey,
         ).pack(side="left")
 
         # Tips
-        tips_frame = ttk.LabelFrame(content, text="Tips", padding=10)
-        tips_frame.grid(row=2, column=0, sticky="ew", pady=20)
+        tips_frame = ctk.CTkFrame(frame, corner_radius=12)
+        tips_frame.pack(fill="x", pady=10)
+
+        ctk.CTkLabel(
+            tips_frame,
+            text="💡 Tips",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=20, pady=(15, 10))
 
         tips = [
-            "• Choose a combination that's easy to remember and use",
-            "• Avoid hotkeys used by other programs (like Ctrl+C, Ctrl+V)",
-            "• Consider combinations like Ctrl+Shift+H or Alt+Space",
-            "• You can change this later in Settings",
+            "Choose a combination that's easy to remember",
+            "Avoid hotkeys used by other programs (Ctrl+C, Ctrl+V)",
+            "Try combinations like Ctrl+Shift+H or Alt+Space",
         ]
 
         for tip in tips:
-            label = ttk.Label(
+            ctk.CTkLabel(
                 tips_frame,
-                text=tip,
-                font=("Segoe UI", 9),
-                foreground="gray",
-            )
-            label.pack(anchor="w", pady=2)
+                text=f"• {tip}",
+                font=ctk.CTkFont(size=12),
+                text_color="gray",
+            ).pack(anchor="w", padx=20, pady=2)
 
-        return content
+        ctk.CTkLabel(tips_frame, text="").pack(pady=5)
 
-    def _create_transcription_mode_content(self, parent: ttk.Frame) -> ttk.Frame:
-        """Create the transcription mode selection step content."""
-        content = ttk.Frame(parent)
-        content.columnconfigure(0, weight=1)
+    def _create_transcription_mode_content(self) -> None:
+        """Create the transcription mode selection step."""
+        # Use scrollable frame since remote settings can overflow on small screens
+        frame = ctk.CTkScrollableFrame(self._content_frame, fg_color="transparent")
+        frame.pack(fill="both", expand=True)
 
-        # Instructions
-        instruction_label = ttk.Label(
-            content,
-            text="Choose how you want to transcribe speech. You can change this later.",
-            font=("Segoe UI", 10),
-            justify="left",
+        ctk.CTkLabel(
+            frame,
+            text="Choose how you want to transcribe speech.",
+            font=ctk.CTkFont(size=14),
+            text_color="gray",
+        ).pack(anchor="w", pady=(0, 20))
+
+        is_remote = self._settings.remote_transcription_enabled
+        self._transcription_mode = ctk.StringVar(
+            value="remote" if is_remote else "local"
         )
-        instruction_label.grid(row=0, column=0, sticky="ew", pady=(0, 20))
 
-        # Mode selection
-        modes_frame = ttk.LabelFrame(content, text="Transcription Method", padding=15)
-        modes_frame.grid(row=1, column=0, sticky="ew", pady=10)
+        # Local option
+        local_frame = ctk.CTkFrame(frame, corner_radius=12)
+        local_frame.pack(fill="x", pady=5)
 
-        self._transcription_mode = tk.StringVar(value="local" if not self._settings.remote_transcription_enabled else "remote")
-
-        # Local transcription option
-        local_frame = ttk.Frame(modes_frame)
-        local_frame.grid(row=0, column=0, sticky="ew", pady=10)
-        local_frame.columnconfigure(1, weight=1)
-
-        local_radio = ttk.Radiobutton(
+        local_radio = ctk.CTkRadioButton(
             local_frame,
             variable=self._transcription_mode,
             value="local",
             text="Local Transcription (Recommended)",
-            font=("Segoe UI", 11, "bold"),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=self._on_mode_change,
         )
-        local_radio.grid(row=0, column=0, sticky="w", pady=(0, 5))
+        local_radio.pack(anchor="w", padx=20, pady=(15, 5))
 
-        local_desc = ttk.Label(
+        ctk.CTkLabel(
             local_frame,
-            text="Speech is transcribed locally on your computer using AI models. "
-                 "This provides better privacy and works offline after the initial setup.",
-            font=("Segoe UI", 9),
-            foreground="gray",
-            wraplength=400,
+            text="Speech is processed locally. Better privacy, works offline.",
+            font=ctk.CTkFont(size=12),
+            text_color="gray",
             justify="left",
-        )
-        local_desc.grid(row=1, column=0, sticky="w")
+        ).pack(anchor="w", padx=45, pady=(0, 15))
 
-        # Remote transcription option
-        remote_frame = ttk.Frame(modes_frame)
-        remote_frame.grid(row=1, column=0, sticky="ew", pady=10)
-        remote_frame.columnconfigure(1, weight=1)
+        # Remote option
+        remote_frame = ctk.CTkFrame(frame, corner_radius=12)
+        remote_frame.pack(fill="x", pady=5)
 
-        remote_radio = ttk.Radiobutton(
+        remote_radio = ctk.CTkRadioButton(
             remote_frame,
             variable=self._transcription_mode,
             value="remote",
             text="Remote Transcription",
-            font=("Segoe UI", 11, "bold"),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=self._on_mode_change,
         )
-        remote_radio.grid(row=0, column=0, sticky="w", pady=(0, 5))
+        remote_radio.pack(anchor="w", padx=20, pady=(15, 5))
 
-        remote_desc = ttk.Label(
+        ctk.CTkLabel(
             remote_frame,
-            text="Speech is sent to a remote service for transcription. "
-                 "This may require internet connection and API configuration.",
-            font=("Segoe UI", 9),
-            foreground="gray",
-            wraplength=400,
-            justify="left",
-        )
-        remote_desc.grid(row=1, column=0, sticky="w")
+            text="Speech is sent to a remote service. Requires internet and API setup.",
+            font=ctk.CTkFont(size=12),
+            text_color="gray",
+        ).pack(anchor="w", padx=45, pady=(0, 15))
 
-        # Remote settings (initially hidden)
-        self._remote_settings_frame = ttk.LabelFrame(
-            modes_frame,
+        # Remote settings
+        self._remote_settings_frame = ctk.CTkFrame(frame, corner_radius=12)
+
+        self._endpoint_var = ctk.StringVar(
+            value=self._settings.remote_transcription_endpoint
+        )
+        self._api_key_var = ctk.StringVar(
+            value=self._settings.remote_transcription_api_key
+        )
+        self._model_var = ctk.StringVar(value=self._settings.remote_transcription_model)
+
+        ctk.CTkLabel(
+            self._remote_settings_frame,
             text="Remote Settings",
-            padding=10,
-        )
-        self._remote_settings_frame.grid(
-            row=2, column=0, sticky="ew",
-            pady=(10, 0)
-        )
-        self._remote_settings_frame.columnconfigure(1, weight=1)
-        self._remote_settings_frame.grid_remove()  # Initially hidden
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=20, pady=(15, 10))
 
-        # Endpoint URL
-        ttk.Label(self._remote_settings_frame, text="Endpoint URL:").grid(
-            row=0, column=0, sticky="w", pady=(0, 5)
-        )
-        self._endpoint_var = tk.StringVar(value=self._settings.remote_transcription_endpoint)
-        endpoint_entry = ttk.Entry(
+        # Endpoint
+        ctk.CTkLabel(
+            self._remote_settings_frame,
+            text="Endpoint URL:",
+            font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", padx=20, pady=(5, 2))
+
+        ctk.CTkEntry(
             self._remote_settings_frame,
             textvariable=self._endpoint_var,
-        )
-        endpoint_entry.grid(row=0, column=1, sticky="ew", padx=(10, 0), pady=(0, 5))
+            placeholder_text="https://api.example.com/transcribe",
+        ).pack(fill="x", padx=20, pady=(0, 10))
 
         # API Key
-        ttk.Label(self._remote_settings_frame, text="API Key (optional):").grid(
-            row=1, column=0, sticky="w", pady=(0, 5)
-        )
-        self._api_key_var = tk.StringVar(value=self._settings.remote_transcription_api_key)
-        api_key_entry = ttk.Entry(
+        ctk.CTkLabel(
+            self._remote_settings_frame,
+            text="API Key (optional):",
+            font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", padx=20, pady=(5, 2))
+
+        ctk.CTkEntry(
             self._remote_settings_frame,
             textvariable=self._api_key_var,
-            show="*",
-        )
-        api_key_entry.grid(row=1, column=1, sticky="ew", padx=(10, 0), pady=(0, 5))
+            show="•",
+            placeholder_text="Your API key",
+        ).pack(fill="x", padx=20, pady=(0, 10))
 
         # Model
-        ttk.Label(self._remote_settings_frame, text="Model:").grid(
-            row=2, column=0, sticky="w", pady=(0, 5)
-        )
-        self._model_var = tk.StringVar(value=self._settings.remote_transcription_model)
-        model_entry = ttk.Entry(
+        ctk.CTkLabel(
+            self._remote_settings_frame,
+            text="Model:",
+            font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", padx=20, pady=(5, 2))
+
+        ctk.CTkEntry(
             self._remote_settings_frame,
             textvariable=self._model_var,
-        )
-        model_entry.grid(row=2, column=1, sticky="ew", padx=(10, 0), pady=(0, 5))
+            placeholder_text="whisper-1",
+        ).pack(fill="x", padx=20, pady=(0, 15))
 
-        # Bind to show/hide remote settings
-        def on_mode_change(*args):
-            if self._transcription_mode.get() == "remote":
-                self._remote_settings_frame.grid()
-            else:
-                self._remote_settings_frame.grid_remove()
+        self._on_mode_change()
 
-        self._transcription_mode.trace_add("write", on_mode_change)
-        on_mode_change()  # Initial call
+    def _on_mode_change(self) -> None:
+        """Handle transcription mode change."""
+        if self._transcription_mode.get() == "remote":
+            self._remote_settings_frame.pack(fill="x", pady=10)
+        else:
+            self._remote_settings_frame.pack_forget()
 
-        return content
-
-    def _create_test_content(self, parent: ttk.Frame) -> ttk.Frame:
+    def _create_test_content(self) -> None:
         """Create the testing step content."""
-        content = ttk.Frame(parent)
-        content.columnconfigure(0, weight=1)
+        frame = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+        frame.pack(fill="both", expand=True)
 
-        # Instructions
-        instruction_label = ttk.Label(
-            content,
-            text="Let's test your setup to make sure everything works correctly.",
-            font=("Segoe UI", 10),
-            justify="left",
-        )
-        instruction_label.grid(row=0, column=0, sticky="ew", pady=(0, 20))
+        ctk.CTkLabel(
+            frame,
+            text="Let's verify everything is working correctly.",
+            font=ctk.CTkFont(size=14),
+            text_color="gray",
+        ).pack(anchor="w", pady=(0, 20))
 
-        # Test results frame
-        self._test_results_frame = ttk.LabelFrame(content, text="Test Results", padding=15)
-        self._test_results_frame.grid(row=1, column=0, sticky="ew", pady=10)
-        self._test_results_frame.columnconfigure(0, weight=1)
+        # Test results
+        test_frame = ctk.CTkFrame(frame, corner_radius=12)
+        test_frame.pack(fill="both", expand=True, pady=10)
 
-        # Test status
-        self._test_status_var = tk.StringVar(value="Ready to test")
-        status_label = ttk.Label(
-            self._test_results_frame,
+        self._test_status_var = ctk.StringVar(value="Ready to test")
+
+        ctk.CTkLabel(
+            test_frame,
             textvariable=self._test_status_var,
-            font=("Segoe UI", 11, "bold"),
-        )
-        status_label.grid(row=0, column=0, sticky="w", pady=(0, 10))
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", padx=20, pady=(15, 10))
 
-        # Test details
-        self._test_details_text = tk.Text(
-            self._test_results_frame,
-            height=8,
-            wrap="word",
-            font=("Consolas", 9),
+        self._test_textbox = ctk.CTkTextbox(
+            test_frame,
+            height=150,
+            font=ctk.CTkFont(family="Consolas", size=12),
             state="disabled",
         )
-        self._test_details_text.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        self._test_textbox.pack(fill="both", expand=True, padx=20, pady=(0, 15))
 
-        # Test button
-        self._test_button = ttk.Button(
-            self._test_results_frame,
+        self._test_button = ctk.CTkButton(
+            test_frame,
             text="Run Test",
+            width=120,
             command=self._run_test,
         )
-        self._test_button.grid(row=2, column=0)
+        self._test_button.pack(pady=(0, 15))
 
-        return content
-
-    def _create_complete_content(self, parent: ttk.Frame) -> ttk.Frame:
+    def _create_complete_content(self) -> None:
         """Create the completion step content."""
-        content = ttk.Frame(parent)
-        content.columnconfigure(0, weight=1)
+        frame = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+        frame.pack(fill="both", expand=True)
 
-        # Success message
-        success_text = """
-🎉 You're all set up and ready to use Hoppy Whisper!
+        # Success icon
+        ctk.CTkLabel(
+            frame,
+            text="🎉",
+            font=ctk.CTkFont(size=48),
+        ).pack(pady=(20, 10))
 
-Your configuration has been saved. You can always change these settings later
-through the Settings menu in the tray icon.
+        ctk.CTkLabel(
+            frame,
+            text="You're all set!",
+            font=ctk.CTkFont(size=24, weight="bold"),
+        ).pack()
 
-Quick Start:
-1. Click the tray icon to access the menu
-2. Press your hotkey to start recording
-3. Speak clearly into your microphone
-4. Release the hotkey to transcribe
+        ctk.CTkLabel(
+            frame,
+            text="Your configuration has been saved.",
+            font=ctk.CTkFont(size=14),
+            text_color="gray",
+        ).pack(pady=(5, 20))
 
-Your transcriptions will be automatically copied to the clipboard
-and you can paste them anywhere!
-        """
+        # Summary
+        summary_frame = ctk.CTkFrame(frame, corner_radius=12)
+        summary_frame.pack(fill="x", pady=10)
 
-        success_label = ttk.Label(
-            content,
-            text=success_text.strip(),
-            font=("Segoe UI", 11),
-            justify="left",
-        )
-        success_label.grid(row=0, column=0, sticky="ew", pady=20)
+        ctk.CTkLabel(
+            summary_frame,
+            text="Your Configuration",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", padx=20, pady=(15, 10))
 
-        # Final settings summary
-        summary_frame = ttk.LabelFrame(content, text="Your Configuration", padding=15)
-        summary_frame.grid(row=1, column=0, sticky="ew", pady=10)
-
-        # Display current settings
-        mode_text = "Local" if not self._settings.remote_transcription_enabled else "Remote"
-
+        mode_text = "Remote" if self._settings.remote_transcription_enabled else "Local"
         summary_items = [
             ("Hotkey", self._settings.hotkey_chord),
             ("Transcription Mode", mode_text),
             ("Auto-paste", "Enabled" if self._settings.auto_paste else "Disabled"),
-            ("Start with Windows", "Yes" if self._settings.start_with_windows else "No"),
         ]
 
-        for i, (label, value) in enumerate(summary_items):
-            ttk.Label(
-                summary_frame,
-                text=f"{label}:",
-                font=("Segoe UI", 9, "bold"),
-            ).grid(row=i, column=0, sticky="w", pady=2)
+        for label, value in summary_items:
+            row = ctk.CTkFrame(summary_frame, fg_color="transparent")
+            row.pack(fill="x", padx=20, pady=3)
 
-            ttk.Label(
-                summary_frame,
+            ctk.CTkLabel(
+                row, text=f"{label}:", font=ctk.CTkFont(size=12), width=140, anchor="w"
+            ).pack(side="left")
+
+            ctk.CTkLabel(
+                row,
                 text=value,
-                font=("Segoe UI", 9),
-            ).grid(row=i, column=1, sticky="w", padx=(10, 0), pady=2)
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=self.ACCENT_COLOR,
+            ).pack(side="left")
 
-        return content
+        ctk.CTkLabel(summary_frame, text="").pack(pady=5)
+
+        # Quick start
+        quickstart_frame = ctk.CTkFrame(frame, corner_radius=12)
+        quickstart_frame.pack(fill="x", pady=10)
+
+        ctk.CTkLabel(
+            quickstart_frame,
+            text="Quick Start",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", padx=20, pady=(15, 10))
+
+        steps = [
+            "1. Press your hotkey to start recording",
+            "2. Speak clearly into your microphone",
+            "3. Release the hotkey to transcribe",
+            "4. Text is automatically copied to clipboard!",
+        ]
+
+        for step in steps:
+            ctk.CTkLabel(
+                quickstart_frame,
+                text=step,
+                font=ctk.CTkFont(size=12),
+                text_color="gray",
+            ).pack(anchor="w", padx=20, pady=2)
+
+        ctk.CTkLabel(quickstart_frame, text="").pack(pady=5)
 
     def _change_hotkey(self) -> None:
-        """Change the hotkey through a simple dialog."""
-        current_hotkey = self._hotkey_var.get()
-
-        # Simple input dialog for now
-        new_hotkey = tk.simpledialog.askstring(
-            "Change Hotkey",
-            f"Enter new hotkey combination:\n\nCurrent: {current_hotkey}\n\nExample: CTRL+SHIFT+H",
-            parent=self._root,
+        """Change the hotkey through a dialog."""
+        dialog = ctk.CTkInputDialog(
+            text="Enter new hotkey combination:\n\nExample: CTRL+SHIFT+H",
+            title="Change Hotkey",
         )
+        new_hotkey = dialog.get_input()
 
         if new_hotkey and new_hotkey.strip():
-            # Basic validation
             hotkey = new_hotkey.strip().upper()
             if "+" in hotkey and len(hotkey) > 3:
                 self._hotkey_var.set(hotkey)
@@ -654,92 +761,120 @@ and you can paste them anywhere!
 
     def _validate_hotkey(self) -> bool:
         """Validate the hotkey configuration."""
+        from tkinter import messagebox
+
         hotkey = self._hotkey_var.get()
         if not hotkey or "+" not in hotkey:
-            messagebox.showerror("Invalid Hotkey", "Please enter a valid hotkey combination.")
+            messagebox.showerror(
+                "Invalid Hotkey", "Please enter a valid hotkey combination."
+            )
             return False
         return True
 
     def _run_test(self) -> None:
         """Run a test of the transcription setup."""
-        self._test_button.config(state="disabled", text="Testing...")
+        self._test_button.configure(state="disabled", text="Testing...")
         self._test_status_var.set("Running tests...")
 
-        # Clear test details
-        self._test_details_text.config(state="normal")
-        self._test_details_text.delete(1.0, tk.END)
-        self._test_details_text.config(state="disabled")
+        self._test_textbox.configure(state="normal")
+        self._test_textbox.delete("1.0", "end")
+        self._test_textbox.configure(state="disabled")
 
-        def update_test_details(message: str):
-            """Update test details text."""
+        def update_details(message: str):
             def update():
-                self._test_details_text.config(state="normal")
-                self._test_details_text.insert(tk.END, message + "\n")
-                self._test_details_text.see(tk.END)
-                self._test_details_text.config(state="disabled")
+                self._test_textbox.configure(state="normal")
+                self._test_textbox.insert("end", message + "\n")
+                self._test_textbox.see("end")
+                self._test_textbox.configure(state="disabled")
+
             self._root.after(0, update)
 
         def run_test_thread():
-            """Run test in background thread."""
             try:
-                update_test_details("Testing transcription setup...")
-
-                # Test transcription mode
+                update_details("Testing transcription setup...")
                 mode = self._transcription_mode.get()
-                update_test_details(f"Mode: {mode} transcription")
+                update_details(f"Mode: {mode} transcription")
 
                 if mode == "remote":
                     endpoint = self._endpoint_var.get()
                     if not endpoint:
-                        update_test_details("❌ Remote mode requires endpoint URL")
-                        self._root.after(0, lambda: self._test_button.config(state="normal", text="Run Test"))
-                        self._root.after(0, lambda: self._test_status_var.set("Test failed"))
+                        update_details("❌ Remote mode requires endpoint URL")
+                        self._root.after(
+                            0,
+                            lambda: self._test_button.configure(
+                                state="normal", text="Run Test"
+                            ),
+                        )
+                        self._root.after(
+                            0, lambda: self._test_status_var.set("Test failed")
+                        )
                         return
 
-                    update_test_details(f"Endpoint: {endpoint}")
-
+                    update_details(f"Endpoint: {endpoint}")
                     try:
-                        transcriber = load_transcriber(
+                        load_transcriber(
                             remote_enabled=True,
                             remote_endpoint=endpoint,
                             remote_api_key=self._api_key_var.get(),
                             remote_model=self._model_var.get(),
                         )
-                        update_test_details("✅ Remote transcriber initialized successfully")
+                        update_details("✅ Remote transcriber initialized")
                     except Exception as e:
-                        update_test_details(f"❌ Failed to initialize remote transcriber: {e}")
-                        self._root.after(0, lambda: self._test_button.config(state="normal", text="Run Test"))
-                        self._root.after(0, lambda: self._test_status_var.set("Test failed"))
+                        update_details(f"❌ Failed: {e}")
+                        self._root.after(
+                            0,
+                            lambda: self._test_button.configure(
+                                state="normal", text="Run Test"
+                            ),
+                        )
+                        self._root.after(
+                            0, lambda: self._test_status_var.set("Test failed")
+                        )
                         return
                 else:
                     try:
                         transcriber = load_transcriber(remote_enabled=False)
-                        update_test_details("✅ Local transcriber initialized successfully")
-                        update_test_details(f"Provider: {transcriber.provider}")
+                        update_details("✅ Local transcriber initialized")
+                        update_details(f"Provider: {transcriber.provider}")
                     except Exception as e:
-                        update_test_details(f"❌ Failed to initialize local transcriber: {e}")
-                        self._root.after(0, lambda: self._test_button.config(state="normal", text="Run Test"))
-                        self._root.after(0, lambda: self._test_status_var.set("Test failed"))
+                        update_details(f"❌ Failed: {e}")
+                        self._root.after(
+                            0,
+                            lambda: self._test_button.configure(
+                                state="normal", text="Run Test"
+                            ),
+                        )
+                        self._root.after(
+                            0, lambda: self._test_status_var.set("Test failed")
+                        )
                         return
 
-                update_test_details("✅ All tests passed!")
-                self._root.after(0, lambda: self._test_status_var.set("All tests passed"))
+                update_details("✅ All tests passed!")
+                self._root.after(
+                    0, lambda: self._test_status_var.set("All tests passed")
+                )
 
             except Exception as e:
-                update_test_details(f"❌ Test failed: {e}")
+                update_details(f"❌ Test failed: {e}")
                 self._root.after(0, lambda: self._test_status_var.set("Test failed"))
-
             finally:
-                self._root.after(0, lambda: self._test_button.config(state="normal", text="Run Test"))
+                self._root.after(
+                    0,
+                    lambda: self._test_button.configure(
+                        state="normal", text="Run Test"
+                    ),
+                )
 
-        import threading
         threading.Thread(target=run_test_thread, daemon=True).start()
 
     def _on_cancel(self) -> None:
         """Handle cancel button click."""
+        from tkinter import messagebox
+
         if messagebox.askyesno(
             "Cancel Setup",
-            "Are you sure you want to cancel the setup?\n\nYou can run this setup again from the Settings menu.",
+            "Are you sure you want to cancel?\n\n"
+            "You can run setup again from the Settings menu.",
         ):
             self._cleanup()
 
@@ -750,10 +885,9 @@ and you can paste them anywhere!
 
     def _on_next(self) -> None:
         """Handle next button click."""
-        current_step = self._steps[self._current_step]
+        step = self._steps[self._current_step]
 
-        # Validate if required
-        if current_step.validation_func and not current_step.validation_func():
+        if step.validation_func and not step.validation_func():
             return
 
         if self._current_step < len(self._steps) - 1:
@@ -761,13 +895,11 @@ and you can paste them anywhere!
 
     def _on_finish(self) -> None:
         """Handle finish button click."""
-        # Save settings
         try:
-            # Update settings from wizard
             self._settings.hotkey_chord = self._hotkey_var.get()
 
             mode = self._transcription_mode.get()
-            self._settings.remote_transcription_enabled = (mode == "remote")
+            self._settings.remote_transcription_enabled = mode == "remote"
             if mode == "remote":
                 self._settings.remote_transcription_endpoint = self._endpoint_var.get()
                 self._settings.remote_transcription_api_key = self._api_key_var.get()
@@ -780,10 +912,9 @@ and you can paste them anywhere!
 
         except Exception as exc:
             LOGGER.error("Failed to save onboarding settings: %s", exc)
-            messagebox.showerror(
-                "Save Error",
-                "Failed to save your settings. Please try again.",
-            )
+            from tkinter import messagebox
+
+            messagebox.showerror("Save Error", "Failed to save settings.")
             return
 
         self._is_complete = True

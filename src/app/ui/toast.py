@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import threading
-import tkinter as tk
 from dataclasses import dataclass
 from typing import Callable, Optional
+
+import customtkinter as ctk
 
 LOGGER = logging.getLogger("hoppy_whisper.toast")
 
@@ -14,23 +15,28 @@ LOGGER = logging.getLogger("hoppy_whisper.toast")
 @dataclass
 class ToastConfig:
     """Configuration for toast notifications."""
+
     duration_ms: int = 4000
-    max_width: int = 350
+    max_width: int = 380
     fade_duration_ms: int = 300
-    padding: int = 15
-    background: str = "#2d3748"
-    foreground: str = "#ffffff"
-    border_color: str = "#4a5568"
-    border_width: int = 1
-    corner_radius: int = 8
+    padding: int = 20
+    corner_radius: int = 12
 
 
 class Toast:
-    """Individual toast notification."""
+    """Individual toast notification with modern styling."""
+
+    # Color schemes for different toast types
+    TYPE_COLORS = {
+        "info": {"bg": "#1e3a5f", "fg": "#ffffff", "accent": "#3b82f6"},
+        "success": {"bg": "#14532d", "fg": "#ffffff", "accent": "#22c55e"},
+        "warning": {"bg": "#713f12", "fg": "#ffffff", "accent": "#eab308"},
+        "error": {"bg": "#7f1d1d", "fg": "#ffffff", "accent": "#ef4444"},
+    }
 
     def __init__(
         self,
-        parent: tk.Toplevel,
+        parent: ctk.CTk,
         message: str,
         title: str = "",
         toast_type: str = "info",
@@ -43,18 +49,9 @@ class Toast:
         self._toast_type = toast_type
         self._config = config or ToastConfig()
         self._on_click = on_click
-        self._root: Optional[tk.Toplevel] = None
-        self._fade_after_id: Optional[str] = None
+        self._root: Optional[ctk.CTkToplevel] = None
         self._auto_destroy_after_id: Optional[str] = None
         self._is_visible = False
-
-        # Color scheme for different toast types
-        self._type_colors = {
-            "info": ("#3182ce", "#ffffff"),      # blue
-            "success": ("#38a169", "#ffffff"),    # green
-            "warning": ("#d69e2e", "#000000"),    # yellow
-            "error": ("#e53e3e", "#ffffff"),      # red
-        }
 
     def show(self) -> None:
         """Display the toast notification."""
@@ -71,116 +68,130 @@ class Toast:
         """Hide the toast with fade effect."""
         if not self._root or not self._is_visible:
             return
-
         self._fade_out()
 
     def _create_window(self) -> None:
-        """Create the toast window."""
-        self._root = tk.Toplevel(self._parent)
-        self._root.withdraw()  # Start hidden for fade-in effect
-        self._root.overrideredirect(True)  # Remove window decorations
-        self._root.configure(bg=self._config.background)
+        """Create the toast window with modern styling."""
+        colors = self.TYPE_COLORS.get(self._toast_type, self.TYPE_COLORS["info"])
 
-        # Configure window attributes for better appearance
+        self._root = ctk.CTkToplevel(self._parent)
+        self._root.withdraw()
+        self._root.overrideredirect(True)
+        self._root.attributes("-topmost", True)
+
+        # Set transparency
         try:
-            # Try to make it transparent for rounded corners effect
-            if hasattr(self._root, "attributes"):
-                self._root.attributes("-alpha", 0.0)  # Start transparent
+            self._root.attributes("-alpha", 0.0)
         except Exception:
-            pass  # Fallback if transparency not supported
+            pass
 
-        # Create main frame
-        main_frame = tk.Frame(
+        # Main frame with rounded corners
+        main_frame = ctk.CTkFrame(
             self._root,
-            bg=self._config.background,
-            highlightthickness=self._config.border_width,
-            highlightbackground=self._config.border_color,
-            relief="flat",
-            bd=0,
+            fg_color=colors["bg"],
+            corner_radius=self._config.corner_radius,
+            border_width=2,
+            border_color=colors["accent"],
         )
         main_frame.pack(
+            fill="both",
+            expand=True,
+            padx=2,
+            pady=2,
+        )
+
+        # Content frame
+        content_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        content_frame.pack(
             fill="both",
             expand=True,
             padx=self._config.padding,
             pady=self._config.padding,
         )
 
-        # Add content
+        # Icon based on type
+        icons = {"info": "ℹ️", "success": "✓", "warning": "⚠", "error": "✕"}
+        icon = icons.get(self._toast_type, "ℹ️")
+
+        # Header with icon and title
         if self._title:
-            title_label = tk.Label(
-                main_frame,
+            header_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+            header_frame.pack(fill="x", pady=(0, 8))
+
+            icon_label = ctk.CTkLabel(
+                header_frame,
+                text=icon,
+                font=ctk.CTkFont(size=16, weight="bold"),
+                text_color=colors["accent"],
+            )
+            icon_label.pack(side="left", padx=(0, 8))
+
+            title_label = ctk.CTkLabel(
+                header_frame,
                 text=self._title,
-                font=("Segoe UI", 9, "bold"),
-                bg=self._config.background,
-                fg=self._get_type_colors()[1],
+                font=ctk.CTkFont(size=14, weight="bold"),
+                text_color=colors["fg"],
                 anchor="w",
             )
-            title_label.pack(fill="x", pady=(0, 2))
+            title_label.pack(side="left", fill="x", expand=True)
 
-        message_label = tk.Label(
-            main_frame,
+        # Message
+        message_label = ctk.CTkLabel(
+            content_frame,
             text=self._message,
-            font=("Segoe UI", 9),
-            bg=self._config.background,
-            fg=self._get_type_colors()[1],
+            font=ctk.CTkFont(size=13),
+            text_color=colors["fg"],
             anchor="w",
-            wraplength=self._config.max_width - 2 * self._config.padding,
             justify="left",
+            wraplength=self._config.max_width - 2 * self._config.padding - 20,
         )
         message_label.pack(fill="x")
 
         # Bind click events
         if self._on_click:
+
             def on_click_handler(event=None):
                 if self._on_click:
                     self._on_click()
-                    self.hide()
+                self.hide()
 
-            main_frame.bind("<Button-1>", on_click_handler)
-            title_label.bind("<Button-1>", on_click_handler)
-            message_label.bind("<Button-1>", on_click_handler)
+            for widget in [main_frame, content_frame, message_label]:
+                widget.bind("<Button-1>", on_click_handler)
+            if self._title:
+                header_frame.bind("<Button-1>", on_click_handler)
 
-        # Add hover effects
+        # Hover effect
         def on_enter(event):
             try:
-                if hasattr(self._root, "attributes"):
-                    self._root.attributes("-alpha", 0.95)
+                self._root.attributes("-alpha", 0.98)
             except Exception:
                 pass
 
         def on_leave(event):
             try:
-                if hasattr(self._root, "attributes"):
-                    self._root.attributes("-alpha", 0.9)
+                self._root.attributes("-alpha", 0.95)
             except Exception:
                 pass
 
         main_frame.bind("<Enter>", on_enter)
         main_frame.bind("<Leave>", on_leave)
 
-    def _get_type_colors(self) -> tuple[str, str]:
-        """Get colors for the current toast type."""
-        return self._type_colors.get(self._toast_type, self._type_colors["info"])
-
     def _position_window(self) -> None:
         """Position the toast in the bottom-right corner."""
         if not self._root:
             return
 
-        # Update geometry to get proper dimensions
         self._root.update_idletasks()
 
-        width = min(self._config.max_width, max(200, self._root.winfo_reqwidth()))
+        width = min(self._config.max_width, max(250, self._root.winfo_reqwidth()))
         height = self._root.winfo_reqheight()
 
-        # Get screen dimensions
         screen_width = self._root.winfo_screenwidth()
         screen_height = self._root.winfo_screenheight()
 
-        # Position in bottom-right corner with margin
-        margin = 20
+        margin = 24
         x = screen_width - width - margin
-        y = screen_height - height - margin
+        y = screen_height - height - margin - 48  # Account for taskbar
 
         self._root.geometry(f"{width}x{height}+{x}+{y}")
 
@@ -195,22 +206,20 @@ class Toast:
 
     def _fade_in(self) -> None:
         """Fade in the toast window."""
+
         def fade_step(alpha: float):
             if not self._root or not self._root.winfo_exists():
                 return
 
-            if alpha < 0.9:
+            if alpha < 0.95:
                 try:
-                    if hasattr(self._root, "attributes"):
-                        self._root.attributes("-alpha", alpha)
+                    self._root.attributes("-alpha", alpha)
                 except Exception:
                     pass
-                # Schedule next step
                 self._root.after(20, lambda: fade_step(alpha + 0.1))
             else:
                 try:
-                    if hasattr(self._root, "attributes"):
-                        self._root.attributes("-alpha", 0.9)
+                    self._root.attributes("-alpha", 0.95)
                 except Exception:
                     pass
 
@@ -227,48 +236,30 @@ class Toast:
 
             if alpha > 0.0:
                 try:
-                    if hasattr(self._root, "attributes"):
-                        self._root.attributes("-alpha", alpha)
+                    self._root.attributes("-alpha", alpha)
                 except Exception:
                     pass
-                # Schedule next step
-                self._root.after(20, lambda: fade_step(alpha - 0.1))
+                self._root.after(20, lambda: fade_step(alpha - 0.15))
             else:
                 self._destroy()
 
-        try:
-            if hasattr(self._root, "attributes"):
-                self._root.attributes("-alpha", 0.9)
-        except Exception:
-            pass
-
-        fade_step(0.9)
+        fade_step(0.95)
 
     def _schedule_auto_destroy(self) -> None:
         """Schedule automatic destruction of the toast."""
         if not self._root:
             return
 
-        # Calculate total duration including fade
-        total_duration = self._config.duration_ms + self._config.fade_duration_ms
-        self._auto_destroy_after_id = self._root.after(
-            total_duration, self._fade_out
-        )
+        total_duration = self._config.duration_ms
+        self._auto_destroy_after_id = self._root.after(total_duration, self._fade_out)
 
     def _destroy(self) -> None:
         """Destroy the toast window."""
         self._is_visible = False
 
-        if self._fade_after_id:
-            try:
-                self._root.after_cancel(self._fade_after_id)  # type: ignore[union-attr]
-            except Exception:
-                pass
-            self._fade_after_id = None
-
         if self._auto_destroy_after_id:
             try:
-                self._root.after_cancel(self._auto_destroy_after_id)  # type: ignore[union-attr]
+                self._root.after_cancel(self._auto_destroy_after_id)
             except Exception:
                 pass
             self._auto_destroy_after_id = None
@@ -285,17 +276,22 @@ class ToastManager:
     """Manager for toast notifications."""
 
     def __init__(
-        self, parent: Optional[tk.Tk] = None, config: Optional[ToastConfig] = None
+        self,
+        parent: Optional[ctk.CTk] = None,
+        config: Optional[ToastConfig] = None,
     ):
         self._parent = parent or self._get_root_window()
         self._config = config or ToastConfig()
         self._toasts: list[Toast] = []
         self._lock = threading.Lock()
 
-    def _get_root_window(self) -> tk.Tk:
+    def _get_root_window(self) -> ctk.CTk:
         """Get or create a root window for the toast manager."""
-        root = tk.Tk()
-        root.withdraw()  # Hide the window
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
+
+        root = ctk.CTk()
+        root.withdraw()
         root.title("Hoppy Whisper Toast Manager")
         return root
 
@@ -324,30 +320,23 @@ class ToastManager:
         with self._lock:
             self._toasts.append(toast)
 
-        # Show on main thread
         def show_on_main_thread():
             toast.show()
 
-            # Remove from list when destroyed
-            def on_destroy():
-                with self._lock:
-                    if toast in self._toasts:
-                        self._toasts.remove(toast)
-
-            # This is a bit of a hack, but we can poll for destruction
             def check_and_cleanup():
                 if not toast._root or not toast._root.winfo_exists():
-                    on_destroy()
+                    with self._lock:
+                        if toast in self._toasts:
+                            self._toasts.remove(toast)
                 else:
-                    toast._root.after(1000, check_and_cleanup)  # Check every second
+                    toast._root.after(1000, check_and_cleanup)
 
-            toast._root.after(1000, check_and_cleanup)  # type: ignore[union-attr]
+            if toast._root:
+                toast._root.after(1000, check_and_cleanup)
 
-        # Schedule on main thread if we're not already on it
         try:
             self._parent.after(0, show_on_main_thread)
         except Exception:
-            # Fallback if parent is not available
             threading.Thread(target=show_on_main_thread, daemon=True).start()
 
         return toast
@@ -371,7 +360,6 @@ class ToastManager:
     def hide_all(self) -> None:
         """Hide all visible toasts."""
         with self._lock:
-            # Copy list to avoid modification during iteration
             for toast in self._toasts[:]:
                 toast.hide()
 
@@ -379,12 +367,12 @@ class ToastManager:
         """Cleanup resources."""
         self.hide_all()
 
-        # Destroy the parent window if we created it
         try:
             if self._parent and self._parent.winfo_exists():
-                # Only destroy if it's our managed window
-                if (hasattr(self._parent, 'title') and
-                    self._parent.title() == "Hoppy Whisper Toast Manager"):
+                if (
+                    hasattr(self._parent, "title")
+                    and self._parent.title() == "Hoppy Whisper Toast Manager"
+                ):
                     self._parent.destroy()
         except Exception:
             pass

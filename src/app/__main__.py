@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 import os
+import queue
 import signal
 import sys
 import threading
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 import pyperclip
@@ -74,6 +75,9 @@ class AppRuntime:
         # Initialize UI components
         self._toast_manager = ToastManager()
 
+        # UI request queue for thread-safe window creation
+        self._ui_queue: queue.Queue[Callable[[], None]] = queue.Queue()
+
         self._tray = TrayController(
             app_name=self._app_name,
             menu_actions=TrayMenuActions(
@@ -107,10 +111,14 @@ class AppRuntime:
         # Show onboarding wizard for first-time users
         if not self._settings.first_run_complete:
             if self._show_onboarding_wizard():
-                self._toast_manager.success("Setup completed! Press your hotkey to start transcribing.")
+                self._toast_manager.success(
+                    "Setup completed! Press your hotkey to start transcribing."
+                )
             else:
                 LOGGER.info("Onboarding cancelled by user")
-                self._toast_manager.info("You can run setup again from the Settings menu.")
+                self._toast_manager.info(
+                    "You can run setup again from the Settings menu."
+                )
 
         self._tray.start()
         self._hotkey.start()
@@ -130,12 +138,25 @@ class AppRuntime:
         self._history.close()
 
         # Cleanup toast manager
-        if hasattr(self, '_toast_manager'):
+        if hasattr(self, "_toast_manager"):
             self._toast_manager.cleanup()
 
     def wait(self) -> None:
-        """Block the main thread until a quit signal arrives."""
-        self._stop_event.wait()
+        """Block the main thread until a quit signal arrives, processing UI requests."""
+        while not self._stop_event.is_set():
+            try:
+                # Check for UI requests with timeout to allow stop event checking
+                ui_task = self._ui_queue.get(timeout=0.1)
+                try:
+                    ui_task()
+                except Exception:
+                    LOGGER.exception("Error executing UI task")
+            except queue.Empty:
+                pass
+
+    def _schedule_ui(self, task: Callable[[], None]) -> None:
+        """Schedule a UI task to run on the main thread."""
+        self._ui_queue.put(task)
 
     # Tray menu callbacks -------------------------------------------------
 
@@ -147,18 +168,21 @@ class AppRuntime:
 
     def _show_settings_window(self) -> None:
         """Show the settings window for configuration management."""
-        try:
-            settings_window = SettingsWindow(
-                settings=self._settings,
-                on_apply=self._on_settings_applied,
-            )
-            settings_window.show()
-        except Exception as exc:
-            LOGGER.exception("Failed to open settings window", exc_info=exc)
-            self._toast_manager.error(
-                "Failed to open settings window. Please try again.",
-                "Settings Error"
-            )
+
+        def show():
+            try:
+                settings_window = SettingsWindow(
+                    settings=self._settings,
+                    on_apply=self._on_settings_applied,
+                )
+                settings_window.show()
+            except Exception as exc:
+                LOGGER.exception("Failed to open settings window", exc_info=exc)
+                self._toast_manager.error(
+                    "Failed to open settings window.", "Settings Error"
+                )
+
+        self._schedule_ui(show)
 
     def _show_onboarding_wizard(self) -> bool:
         """Show the onboarding wizard for first-time setup."""
@@ -172,7 +196,7 @@ class AppRuntime:
             LOGGER.exception("Failed to show onboarding wizard", exc_info=exc)
             self._toast_manager.error(
                 "Failed to open setup wizard. You can configure settings manually.",
-                "Setup Error"
+                "Setup Error",
             )
             return False
 
@@ -187,8 +211,8 @@ class AppRuntime:
         except Exception as exc:
             LOGGER.error("Failed to restart hotkey after settings change: %s", exc)
             self._toast_manager.error(
-                "Settings applied, but hotkey restart failed. Please restart the application.",
-                "Hotkey Error"
+                "Settings saved but hotkey restart failed. Please restart app.",
+                "Hotkey Error",
             )
 
     def _on_onboarding_complete(self) -> None:
@@ -199,17 +223,23 @@ class AppRuntime:
 
     def _show_history_tip(self) -> None:
         """Open the history search palette."""
-        LOGGER.debug("Opening history palette")
-        try:
-            palette = HistoryPalette(
-                dao=self._history,
-                on_copy=self._palette_copy,
-                on_paste=self._palette_paste,
-            )
-            palette.show()
-        except Exception as exc:
-            LOGGER.exception("Failed to open history palette", exc_info=exc)
-            self._toast_manager.error("Could not open history palette", "History Error")
+
+        def show():
+            LOGGER.debug("Opening history palette")
+            try:
+                palette = HistoryPalette(
+                    dao=self._history,
+                    on_copy=self._palette_copy,
+                    on_paste=self._palette_paste,
+                )
+                palette.show()
+            except Exception as exc:
+                LOGGER.exception("Failed to open history palette", exc_info=exc)
+                self._toast_manager.error(
+                    "Could not open history palette", "History Error"
+                )
+
+        self._schedule_ui(show)
 
     def _set_start_with_windows(self, enabled: bool) -> None:
         if self._settings.start_with_windows == enabled:
@@ -258,7 +288,10 @@ class AppRuntime:
             self._schedule_idle_reset()
         except Exception as exc:
             LOGGER.exception("Failed to start audio capture", exc_info=exc)
-            self._toast_manager.error("Could not start audio capture. Please check your microphone.", "Recording Error")
+            self._toast_manager.error(
+                "Could not start audio capture. Check your microphone.",
+                "Recording Error",
+            )
             self._recording_active = False
             self._tray.set_state(TrayState.ERROR)
             self._schedule_idle_reset()
@@ -297,7 +330,10 @@ class AppRuntime:
                 LOGGER.warning(
                     "Audio buffer too short (%.2f s), skipping transcription", duration
                 )
-                self._toast_manager.warning("Please hold the hotkey longer to record audio.", "Recording Too Short")
+                self._toast_manager.warning(
+                    "Please hold the hotkey longer to record audio.",
+                    "Recording Too Short",
+                )
                 self._tray.set_state(TrayState.ERROR)
                 self._schedule_idle_reset()
                 return
@@ -318,7 +354,10 @@ class AppRuntime:
         """Transcribe the audio buffer and copy to clipboard."""
         if self._audio_buffer is None:
             LOGGER.error("No audio buffer to transcribe")
-            self._toast_manager.error("No audio recorded. Please try recording again.", "Transcription Error")
+            self._toast_manager.error(
+                "No audio recorded. Please try recording again.",
+                "Transcription Error",
+            )
             self._tray.set_state(TrayState.ERROR)
             self._schedule_idle_reset()
             return
@@ -360,7 +399,9 @@ class AppRuntime:
                 LOGGER.debug("Text copied to clipboard")
             except Exception as exc:
                 LOGGER.error("Failed to copy to clipboard: %s", exc)
-                self._toast_manager.error("Could not copy text to clipboard.", "Clipboard Error")
+                self._toast_manager.error(
+                    "Could not copy text to clipboard.", "Clipboard Error"
+                )
                 self._tray.set_state(TrayState.ERROR)
                 self._schedule_idle_reset()
                 return
@@ -374,7 +415,9 @@ class AppRuntime:
                 self._perform_paste()
                 self._tray.set_state(TrayState.PASTED)
 
-            self._toast_manager.success(f"Transcribed: {cleaned_text[:60]}...", "Transcription Complete")
+            self._toast_manager.success(
+                f"Transcribed: {cleaned_text[:60]}...", "Transcription Complete"
+            )
 
             # Record performance metrics
             metrics = get_metrics()
@@ -419,19 +462,19 @@ class AppRuntime:
             # User-facing message based on error category
             if exc.error_type.name == "NETWORK_TIMEOUT":
                 message = (
-                    "Remote transcription timed out. " "Check network/endpoint latency."
+                    "Remote transcription timed out. Check network/endpoint latency."
                 )
             elif exc.error_type.name == "CONNECTION_FAILED":
                 message = (
-                    "Cannot connect to remote API. " "Check endpoint URL and network."
+                    "Cannot connect to remote API. Check endpoint URL and network."
                 )
             elif exc.error_type.name == "HTTP_ERROR":
                 message = (
-                    f"Remote API error (HTTP {exc.status_code}). " "Check API status."
+                    f"Remote API error (HTTP {exc.status_code}). Check API status."
                 )
             elif exc.error_type.name == "PARSE_ERROR":
                 message = (
-                    "Remote API returned unexpected format. " "Check API configuration."
+                    "Remote API returned unexpected format. Check API configuration."
                 )
             else:
                 message = "Remote transcription failed. Check endpoint and network."
@@ -441,7 +484,9 @@ class AppRuntime:
             self._schedule_idle_reset()
         except Exception as exc:
             LOGGER.exception("Transcription failed", exc_info=exc)
-            self._toast_manager.error("Could not transcribe audio. Try again.", "Transcription Failed")
+            self._toast_manager.error(
+                "Could not transcribe audio. Try again.", "Transcription Failed"
+            )
             self._tray.set_state(TrayState.ERROR)
             self._schedule_idle_reset()
 
@@ -782,17 +827,74 @@ def main() -> int:
             LOGGER.info("Transcriber ready (provider: %s)", transcriber.provider)
     except Exception as exc:
         LOGGER.exception("Failed to load transcriber", exc_info=exc)
-        if settings.remote_transcription_enabled:
-            show_error_dialog(
-                "Failed to connect to remote transcription service. "
-                "Please check your endpoint configuration and try again."
+        
+        # If remote transcription failed, show onboarding wizard to let them reconfigure
+        # (regardless of first_run_complete status if config is invalid)
+        is_remote_config_invalid = (
+            settings.remote_transcription_enabled 
+            and not settings.remote_transcription_endpoint
+        )
+        if is_remote_config_invalid or (settings.remote_transcription_enabled and not settings.first_run_complete):
+            LOGGER.info(
+                "Remote transcription failed and first_run incomplete; showing onboarding"
             )
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    onboarding = OnboardingWizard(settings)
+                    if onboarding.show():
+                        # Onboarding completed; retry loading transcriber with new settings
+                        try:
+                            transcriber = load_transcriber(
+                                remote_enabled=settings.remote_transcription_enabled,
+                                remote_endpoint=settings.remote_transcription_endpoint,
+                                remote_api_key=settings.remote_transcription_api_key,
+                                remote_model=settings.remote_transcription_model,
+                            )
+                            LOGGER.info("Transcriber loaded successfully after onboarding")
+                            break  # Success!
+                        except Exception as retry_exc:
+                            LOGGER.warning(
+                                "Transcriber failed after onboarding (attempt %d/%d): %s",
+                                attempt + 1,
+                                max_retries,
+                                retry_exc,
+                            )
+                            if attempt < max_retries - 1:
+                                # Show onboarding again to let user fix config
+                                LOGGER.info("Bringing user back to onboarding to fix config")
+                                continue
+                            else:
+                                # Final attempt failed
+                                show_error_dialog(
+                                    "Remote transcription setup failed. "
+                                    "Please check your endpoint and try again."
+                                )
+                                return 1
+                    else:
+                        # User cancelled onboarding
+                        LOGGER.info("User cancelled onboarding")
+                        return 1
+                except Exception as onboard_exc:
+                    LOGGER.exception("Failed to show onboarding wizard", exc_info=onboard_exc)
+                    show_error_dialog(
+                        "Setup wizard failed. "
+                        "Please check your configuration and try again."
+                    )
+                    return 1
         else:
-            show_error_dialog(
-                "Failed to load speech recognition model. "
-                "Please check your internet connection and try again."
-            )
-        return 1
+            # Show error for local transcription or if user already completed onboarding
+            if settings.remote_transcription_enabled:
+                show_error_dialog(
+                    "Failed to connect to remote transcription service. "
+                    "Please check your endpoint configuration and try again."
+                )
+            else:
+                show_error_dialog(
+                    "Failed to load speech recognition model. "
+                    "Please check your internet connection and try again."
+                )
+            return 1
 
     try:
         runtime = AppRuntime(settings, transcriber)
