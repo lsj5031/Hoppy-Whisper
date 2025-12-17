@@ -151,17 +151,8 @@ class TrayController:
 
     def _build_menu(self) -> "pystray.Menu":
         return pystray.Menu(
-            pystray.MenuItem(
-                "Toggle Recording", self._wrap(self._menu_actions.toggle_recording)
-            ),
             pystray.MenuItem("Settings", self._wrap(self._menu_actions.show_settings)),
             pystray.MenuItem("History", self._wrap(self._menu_actions.show_history)),
-            pystray.MenuItem("Restart", self._wrap(self._menu_actions.restart_app)),
-            pystray.MenuItem(
-                "Start with Windows",
-                self._wrap(lambda: self.toggle_start_with_windows()),
-                checked=lambda _: self._start_with_windows,
-            ),
             pystray.MenuItem("Quit", self._wrap(self._menu_actions.quit_app)),
         )
 

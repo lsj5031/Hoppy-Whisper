@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import time
 import wave
@@ -127,6 +128,88 @@ class RemoteTranscriber:
     def warmup(self) -> None:
         """Warmup is not needed for remote transcription."""
         logger.info("Remote transcriber warmup (no-op)")
+
+    def test_connection(self) -> str:
+        """Test endpoint connectivity and response parsing.
+
+        Sends a short silent WAV file to the configured endpoint using the same
+        request format as transcription. Returns extracted text (may be empty).
+
+        Raises:
+            RemoteTranscriptionError: If the request fails or response is invalid
+        """
+        start_time = time.time()
+        timeout_seconds = min(self.timeout, 10.0)
+
+        try:
+            headers: dict[str, str] = {}
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+
+            wav_bytes = _build_silence_wav_bytes(duration_seconds=0.6)
+            files = {"file": ("connection_test.wav", wav_bytes, "audio/wav")}
+            data: dict[str, str] = {}
+            if self.model:
+                data["model"] = self.model
+
+            response = requests.post(
+                self.endpoint,
+                files=files,
+                data=data,
+                headers=headers,
+                timeout=timeout_seconds,
+            )
+
+            request_time_ms = (time.time() - start_time) * 1000
+
+            if response.status_code != 200:
+                raise RemoteTranscriptionError(
+                    error_type=RemoteTranscriptionErrorType.HTTP_ERROR,
+                    context="Remote API returned error",
+                    status_code=response.status_code,
+                    response_text=response.text[:500],
+                )
+
+            try:
+                payload = response.json()
+            except Exception as e:
+                raise RemoteTranscriptionError(
+                    error_type=RemoteTranscriptionErrorType.PARSE_ERROR,
+                    context="Remote API returned invalid JSON",
+                    original_exception=e,
+                    response_text=response.text[:500],
+                ) from e
+
+            text = self._extract_text_from_response(payload)
+            logger.info("Remote connection test succeeded in %.0f ms", request_time_ms)
+            return text
+
+        except RemoteTranscriptionError:
+            raise
+        except requests.exceptions.Timeout as e:
+            raise RemoteTranscriptionError(
+                error_type=RemoteTranscriptionErrorType.NETWORK_TIMEOUT,
+                context=f"Remote API request timed out after {timeout_seconds}s",
+                original_exception=e,
+            ) from e
+        except requests.exceptions.ConnectionError as e:
+            raise RemoteTranscriptionError(
+                error_type=RemoteTranscriptionErrorType.CONNECTION_FAILED,
+                context="Failed to connect to remote API",
+                original_exception=e,
+            ) from e
+        except requests.exceptions.RequestException as e:
+            raise RemoteTranscriptionError(
+                error_type=RemoteTranscriptionErrorType.UNKNOWN,
+                context="Remote API request failed",
+                original_exception=e,
+            ) from e
+        except Exception as e:
+            raise RemoteTranscriptionError(
+                error_type=RemoteTranscriptionErrorType.UNKNOWN,
+                context="Unexpected error during remote connection test",
+                original_exception=e,
+            ) from e
 
     def _get_audio_duration_ms(self, audio_path: Path) -> float:
         """Calculate the duration of an audio file in milliseconds.
@@ -337,3 +420,18 @@ class RemoteTranscriber:
             context="API response does not contain transcription text",
             response_text=str(response_data)[:500],
         )
+
+
+def _build_silence_wav_bytes(
+    duration_seconds: float,
+    sample_rate_hz: int = 16000,
+) -> bytes:
+    """Return a short mono 16-bit PCM WAV containing silence."""
+    frame_count = max(1, int(duration_seconds * sample_rate_hz))
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate_hz)
+        wf.writeframes(b"\x00\x00" * frame_count)
+    return buf.getvalue()

@@ -7,6 +7,7 @@ from .manager import (
     HotkeyInUseError,
     HotkeyManager,
     HotkeyRegistrationError,
+    ensure_hotkey_available,
 )
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "HotkeyManager",
     "HotkeyParseError",
     "HotkeyRegistrationError",
+    "ensure_hotkey_available",
     "parse_hotkey",
 ]
