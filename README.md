@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> This repository is **no longer maintained**.
+>
+> The recommended successor is **tailslap-lite**: https://github.com/lsj5031/tailslap-lite
+>
+> This repo is kept for historical reference and may be out of date.
+
 <div align="center">
 
 # 🐰 Hoppy Whisper
@@ -47,11 +54,12 @@ Hoppy Whisper is a Windows-native tray application for fast speech transcription
 
 ### For End Users
 
-**Download and install the latest release:**
+**Download the current release (recommended):**
 
-1. Go to [Releases](https://github.com/lsj5031/Hoppy-Whisper/releases/latest)
-2. Download **`Hoppy Whisper.exe`** (Remote-first minimal build, ~20 MB)
-3. Extract and run the `.exe` file - the app will appear in your system tray
+1. Go to https://github.com/lsj5031/tailslap-lite/releases/latest
+2. Follow the install instructions in that repository
+
+**Legacy builds (this repo):** Existing releases in this repository are kept for reference only and may not work with current Windows versions or APIs.
 
 **System Requirements:**
 - Windows 10 (64-bit) or Windows 11
@@ -109,36 +117,10 @@ Hoppy Whisper is a Windows-native tray application for fast speech transcription
 
 ## CI and Releases
 
-- **Windows CI** runs on push events to `master`, and tags matching `v*`
-- The workflow installs Poetry, runs Ruff linting, executes pytest, and builds using `HoppyWhisper_Remote.spec`
-- The release attaches the minimal remote-first `Hoppy Whisper.exe` (no bundled models, ~20 MB)
-- **Tag pushes** that match `v*` automatically create a GitHub Release with artifacts and auto-generated release notes
+This repository is archived, so CI and release automation may be disabled or out of date.
 
-### Creating a Release
-
-To publish a new release:
-
-1. **Update version in `pyproject.toml`:**
-   ```toml
-   version = "0.2.0"
-   ```
-
-2. **Commit and tag:**
-    ```powershell
-    git add pyproject.toml
-    git commit -m "Bump version to 0.2.0"
-    git tag v0.2.0
-    git push origin master
-    git push origin v0.2.0
-    ```
-
-3. **GitHub Actions** will automatically:
-   - Build the PyInstaller executable
-   - Run all tests
-   - Create a GitHub Release
-   - Attach `Hoppy Whisper-CPU.exe`
-
-4. **Smoke test** the release build on a clean Windows VM using [SMOKE_TEST.md](SMOKE_TEST.md)
+For current builds/releases and the maintained release process, see:
+https://github.com/lsj5031/tailslap-lite
 
 ## Usage
 
